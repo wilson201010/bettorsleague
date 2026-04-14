@@ -341,6 +341,10 @@
     <div class="bl-modal">
       <div class="bl-modal-title">Create a League</div>
       <div class="bl-form-row">
+        <label class="bl-form-label">League icon (tap to pick emoji)</label>
+        <input class="bl-form-input" type="text" id="lg-emoji" placeholder="tap here and pick an emoji 🏈" maxlength="2" style="font-size:24px;text-align:center;cursor:pointer;" onclick="this.select()" />
+      </div>
+      <div class="bl-form-row">
         <label class="bl-form-label">League name</label>
         <input class="bl-form-input" type="text" id="lg-name" placeholder="e.g. Sunday Night Crew" />
       </div>
@@ -460,18 +464,33 @@
         currentUser = session.user;
         document.getElementById('auth-screen').style.display = 'none';
         document.getElementById('app-screen').classList.add('visible');
+        const cached = localStorage.getItem('bl_username');
+        if (cached) document.getElementById('header-username').textContent = 'Hey, ' + cached;
         await loadProfile();
         await loadDashboard();
         renderGames();
+      } else {
+        document.getElementById('auth-screen').style.display = 'flex';
+        document.getElementById('app-screen').classList.remove('visible');
       }
     });
 
     async function loadProfile() {
-      const { data } = await db.from('profiles').select('*').eq('id', currentUser.id).single();
-      if (data) {
-        currentProfile = data;
-        document.getElementById('header-username').textContent = 'Hey, ' + data.username;
+      try {
+        const { data } = await db.from('profiles').select('*').eq('id', currentUser.id).single();
+        if (data) {
+          currentProfile = data;
+          localStorage.setItem('bl_username', data.username);
+          document.getElementById('header-username').textContent = 'Hey, ' + data.username;
+        }
+      } catch(e) {
+        console.log('Profile load error', e);
       }
+    }
+
+    async function signOut() {
+      localStorage.removeItem('bl_username');
+      await db.auth.signOut();
     }
 
     // ---- DASHBOARD ----
@@ -489,7 +508,7 @@
       if (!userLeagues.length) { el.innerHTML = '<div class="bl-empty">No leagues yet. Create one in the Leagues tab!</div>'; return; }
       el.innerHTML = userLeagues.map(l => `
         <div class="bl-league-card">
-          <div class="bl-league-icon">${l.leagues.name.substring(0,2).toUpperCase()}</div>
+          <div class="bl-league-icon" style="font-size:24px;">${l.leagues.icon || l.leagues.name.substring(0,2).toUpperCase()}</div>
           <div class="bl-league-info">
             <div class="bl-league-name">${l.leagues.name}</div>
             <div class="bl-league-meta">$${l.leagues.buy_in} buy-in · $${l.leagues.bankroll} bankroll · ${l.leagues.payout_structure}</div>
@@ -515,7 +534,7 @@
       if (!userLeagues.length) { el.innerHTML = '<div class="bl-empty">No leagues yet. Create one above!</div>'; return; }
       el.innerHTML = userLeagues.map(l => `
         <div class="bl-league-card">
-          <div class="bl-league-icon">${l.leagues.name.substring(0,2).toUpperCase()}</div>
+          <div class="bl-league-icon" style="font-size:24px;">${l.leagues.icon || l.leagues.name.substring(0,2).toUpperCase()}</div>
           <div class="bl-league-info">
             <div class="bl-league-name">${l.leagues.name}</div>
             <div class="bl-league-meta">Buy-in: $${l.leagues.buy_in} · Bankroll: $${l.leagues.bankroll} · ${l.leagues.payout_structure}</div>
@@ -545,7 +564,8 @@
       const password = document.getElementById('lg-password').value.trim();
       if (!name) { showToast('Enter a league name!', true); return; }
       if (!password) { showToast('Enter a league password!', true); return; }
-      const { data: league, error } = await db.from('leagues').insert({ name, buy_in, bankroll, payout_structure, password, created_by: currentUser.id }).select().single();
+      const icon = document.getElementById('lg-emoji').value.trim() || '🏆';
+      const { data: league, error } = await db.from('leagues').insert({ name, buy_in, bankroll, payout_structure, password, icon, created_by: currentUser.id }).select().single();
       if (error) { showToast('Error creating league', true); return; }
       await db.from('league_members').insert({ league_id: league.id, user_id: currentUser.id, balance: bankroll });
       closeModal();
