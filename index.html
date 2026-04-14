@@ -344,11 +344,12 @@
       <div class="bl-modal-title">Create a League</div>
       <div class="bl-form-row">
         <label class="bl-form-label">League icon</label>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-          <input class="bl-form-input" type="text" id="lg-emoji" placeholder="🏆" maxlength="2" style="font-size:24px;text-align:center;width:60px;flex-shrink:0;" />
-          <span style="font-size:11px;color:var(--bl-muted);">Click one below or press <kbd style="background:var(--bl-surface2);border:1px solid var(--bl-border);border-radius:4px;padding:1px 5px;font-size:10px;">Win+.</kbd> (Windows) / <kbd style="background:var(--bl-surface2);border:1px solid var(--bl-border);border-radius:4px;padding:1px 5px;font-size:10px;">Cmd+Ctrl+Space</kbd> (Mac)</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div id="emoji-display" style="width:48px;height:48px;background:var(--bl-surface2);border:1px solid var(--bl-border);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:26px;">🏆</div>
+          <button type="button" onclick="toggleEmojiPicker()" style="background:var(--bl-surface2);border:1px solid var(--bl-border);border-radius:8px;color:var(--bl-gold);font-size:20px;width:36px;height:36px;cursor:pointer;line-height:1;">+</button>
+          <input type="hidden" id="lg-emoji" value="🏆" />
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <div id="emoji-picker" style="display:none;flex-wrap:wrap;gap:6px;margin-top:10px;">
           <span onclick="setEmoji('🏈')" class="emoji-opt">🏈</span>
           <span onclick="setEmoji('⚽')" class="emoji-opt">⚽</span>
           <span onclick="setEmoji('🏀')" class="emoji-opt">🏀</span>
@@ -371,6 +372,8 @@
           <span onclick="setEmoji('💎')" class="emoji-opt">💎</span>
           <span onclick="setEmoji('🚀')" class="emoji-opt">🚀</span>
           <span onclick="setEmoji('🎰')" class="emoji-opt">🎰</span>
+          <span onclick="setEmoji('🏋️')" class="emoji-opt">🏋️</span>
+          <span onclick="setEmoji('🤠')" class="emoji-opt">🤠</span>
         </div>
       </div>
       <div class="bl-form-row">
@@ -389,7 +392,7 @@
         <label class="bl-form-label">Payout structure</label>
         <select class="bl-form-select" id="lg-payout">
           <option value="winner-take-all">Winner Take All</option>
-          <option value="top-half">Top Half Pays Bottom Half</option>
+          <option value="top-half">Bottom Half Pays Top Half</option>
           <option value="top-3">Top 3 Payout (60/30/10%)</option>
         </select>
       </div>
@@ -449,7 +452,15 @@
       { id:'g6', sport:'NHL', home:'Oilers', away:'Canucks', homeRec:'38-28-6', awayRec:'40-25-7', time:'10:00 PM ET', spread:{home:'+1.5',away:'-1.5',odds:'-175'}, ml:{home:'+145',away:'-175'}, ou:{total:'6.5',over:'-108',under:'-112'} },
     ];
 
-    function setEmoji(e) { document.getElementById("lg-emoji").value = e; }
+    function toggleEmojiPicker() {
+      const p = document.getElementById('emoji-picker');
+      p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+    }
+    function setEmoji(e) {
+      document.getElementById('lg-emoji').value = e;
+      document.getElementById('emoji-display').textContent = e;
+      document.getElementById('emoji-picker').style.display = 'none';
+    }
 
     // ---- AUTH ----
     function switchAuthTab(tab, btn) {
