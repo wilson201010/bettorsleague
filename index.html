@@ -194,6 +194,9 @@
     .bl-loading { text-align: center; color: var(--bl-muted); font-size: 13px; padding: 20px 0; }
     .emoji-opt { font-size: 22px; cursor: pointer; padding: 4px; border-radius: 6px; border: 1px solid var(--bl-border); background: var(--bl-surface2); transition: transform 0.1s; display: inline-block; }
     .emoji-opt:hover { transform: scale(1.2); border-color: var(--bl-gold); }
+    .sport-check { display:flex; align-items:center; gap:5px; background:var(--bl-surface2); border:1px solid var(--bl-border); border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer; }
+    .sport-check input { accent-color: var(--bl-gold); cursor:pointer; }
+    .emoji-opt:hover { transform: scale(1.2); border-color: var(--bl-gold); }
     .bl-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--bl-green); color: #fff; font-size: 14px; font-weight: 500; padding: 12px 24px; border-radius: 24px; transition: transform 0.3s; z-index: 200; white-space: nowrap; }
     .bl-toast.error { background: var(--bl-red); }
     .bl-toast.show { transform: translateX(-50%) translateY(0); }
@@ -339,9 +342,22 @@
   </div>
 
   <!-- CREATE LEAGUE MODAL -->
-  <div class="bl-modal-overlay" id="create-modal">
-    <div class="bl-modal">
+  <div class="bl-modal-overlay" id="create-modal" style="overflow-y:auto;align-items:flex-start;padding:20px 0;">
+    <div class="bl-modal" style="max-width:460px;margin:auto;">
       <div class="bl-modal-title">Create a League</div>
+
+      <!-- LEAGUE TYPE TOGGLE -->
+      <div class="bl-form-row">
+        <label class="bl-form-label">League type</label>
+        <div style="display:flex;gap:8px;">
+          <button type="button" id="type-weekly" onclick="setLeagueType('weekly')" style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--bl-gold);background:rgba(200,168,75,0.15);color:var(--bl-gold);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;">Weekly</button>
+          <button type="button" id="type-season" onclick="setLeagueType('season')" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--bl-border);background:var(--bl-surface2);color:var(--bl-muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;">Season</button>
+        </div>
+        <div id="type-desc-weekly" style="font-size:11px;color:var(--bl-muted);margin-top:6px;">Runs Mon–Sun. $1,000 bankroll resets every Monday. Weekly buy-in and payout.</div>
+        <div id="type-desc-season" style="font-size:11px;color:var(--bl-muted);margin-top:6px;display:none;">Custom start/end dates. Bankroll runs the full duration. One buy-in, one payout at the end.</div>
+      </div>
+
+      <!-- ICON -->
       <div class="bl-form-row">
         <label class="bl-form-label">League icon</label>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -349,45 +365,56 @@
           <button type="button" onclick="toggleEmojiPicker()" style="background:var(--bl-surface2);border:1px solid var(--bl-border);border-radius:8px;color:var(--bl-gold);font-size:20px;width:36px;height:36px;cursor:pointer;line-height:1;">+</button>
           <input type="hidden" id="lg-emoji" value="🏆" />
         </div>
-        <div id="emoji-picker" style="display:none;flex-wrap:wrap;gap:6px;margin-top:10px;">
-          <span onclick="setEmoji('🏈')" class="emoji-opt">🏈</span>
-          <span onclick="setEmoji('⚽')" class="emoji-opt">⚽</span>
-          <span onclick="setEmoji('🏀')" class="emoji-opt">🏀</span>
-          <span onclick="setEmoji('⚾')" class="emoji-opt">⚾</span>
-          <span onclick="setEmoji('🏒')" class="emoji-opt">🏒</span>
-          <span onclick="setEmoji('🎾')" class="emoji-opt">🎾</span>
-          <span onclick="setEmoji('🏆')" class="emoji-opt">🏆</span>
-          <span onclick="setEmoji('💰')" class="emoji-opt">💰</span>
-          <span onclick="setEmoji('🎯')" class="emoji-opt">🎯</span>
-          <span onclick="setEmoji('🔥')" class="emoji-opt">🔥</span>
-          <span onclick="setEmoji('💪')" class="emoji-opt">💪</span>
-          <span onclick="setEmoji('🍺')" class="emoji-opt">🍺</span>
-          <span onclick="setEmoji('😈')" class="emoji-opt">😈</span>
-          <span onclick="setEmoji('🤑')" class="emoji-opt">🤑</span>
-          <span onclick="setEmoji('👑')" class="emoji-opt">👑</span>
-          <span onclick="setEmoji('🎲')" class="emoji-opt">🎲</span>
-          <span onclick="setEmoji('🐐')" class="emoji-opt">🐐</span>
-          <span onclick="setEmoji('🦁')" class="emoji-opt">🦁</span>
-          <span onclick="setEmoji('🐺')" class="emoji-opt">🐺</span>
-          <span onclick="setEmoji('💎')" class="emoji-opt">💎</span>
-          <span onclick="setEmoji('🚀')" class="emoji-opt">🚀</span>
-          <span onclick="setEmoji('🎰')" class="emoji-opt">🎰</span>
-          <span onclick="setEmoji('🏋️')" class="emoji-opt">🏋️</span>
-          <span onclick="setEmoji('🤠')" class="emoji-opt">🤠</span>
+        <div id="emoji-picker" style="display:none;flex-wrap:wrap;gap:6px;margin-top:10px;padding:8px;background:var(--bl-surface2);border:1px solid var(--bl-border);border-radius:8px;">
+          <span onclick="setEmoji('🏈')" class="emoji-opt">🏈</span><span onclick="setEmoji('⚽')" class="emoji-opt">⚽</span><span onclick="setEmoji('🏀')" class="emoji-opt">🏀</span><span onclick="setEmoji('⚾')" class="emoji-opt">⚾</span><span onclick="setEmoji('🏒')" class="emoji-opt">🏒</span><span onclick="setEmoji('🎾')" class="emoji-opt">🎾</span><span onclick="setEmoji('🏌️')" class="emoji-opt">🏌️</span><span onclick="setEmoji('🏆')" class="emoji-opt">🏆</span><span onclick="setEmoji('💰')" class="emoji-opt">💰</span><span onclick="setEmoji('🎯')" class="emoji-opt">🎯</span><span onclick="setEmoji('🔥')" class="emoji-opt">🔥</span><span onclick="setEmoji('💪')" class="emoji-opt">💪</span><span onclick="setEmoji('🍺')" class="emoji-opt">🍺</span><span onclick="setEmoji('😈')" class="emoji-opt">😈</span><span onclick="setEmoji('🤑')" class="emoji-opt">🤑</span><span onclick="setEmoji('👑')" class="emoji-opt">👑</span><span onclick="setEmoji('🎲')" class="emoji-opt">🎲</span><span onclick="setEmoji('🐐')" class="emoji-opt">🐐</span><span onclick="setEmoji('🦁')" class="emoji-opt">🦁</span><span onclick="setEmoji('🐺')" class="emoji-opt">🐺</span><span onclick="setEmoji('💎')" class="emoji-opt">💎</span><span onclick="setEmoji('🚀')" class="emoji-opt">🚀</span><span onclick="setEmoji('🎰')" class="emoji-opt">🎰</span><span onclick="setEmoji('🤠')" class="emoji-opt">🤠</span>
         </div>
       </div>
+
+      <!-- NAME + PASSWORD -->
       <div class="bl-form-row">
         <label class="bl-form-label">League name</label>
         <input class="bl-form-input" type="text" id="lg-name" placeholder="e.g. Sunday Night Crew" />
       </div>
       <div class="bl-form-row">
-        <label class="bl-form-label">Weekly buy-in ($)</label>
+        <label class="bl-form-label">League password</label>
+        <input class="bl-form-input" type="text" id="lg-password" placeholder="e.g. GoPackGo" />
+      </div>
+
+      <!-- SEASON DATES (hidden for weekly) -->
+      <div id="season-dates" style="display:none;">
+        <div class="bl-form-row">
+          <label class="bl-form-label">Start date</label>
+          <input class="bl-form-input" type="datetime-local" id="lg-start" />
+        </div>
+        <div class="bl-form-row">
+          <label class="bl-form-label">End date</label>
+          <input class="bl-form-input" type="datetime-local" id="lg-end" />
+        </div>
+      </div>
+
+      <!-- BUY-IN -->
+      <div class="bl-form-row">
+        <label class="bl-form-label">Buy-in amount ($)</label>
         <input class="bl-form-input" type="number" id="lg-buyin" value="20" />
       </div>
       <div class="bl-form-row">
-        <label class="bl-form-label">Starting bankroll ($)</label>
-        <input class="bl-form-input" type="number" id="lg-bankroll" value="1000" />
+        <label class="bl-form-label">Buy-in schedule</label>
+        <select class="bl-form-select" id="lg-buyin-schedule">
+          <option value="weekly">Weekly (paid & paid out each week)</option>
+          <option value="end">End of duration (one payout at the end)</option>
+          <option value="both">Weekly + End of season bonus pot</option>
+        </select>
       </div>
+
+      <!-- BANKROLL (season only) -->
+      <div id="bankroll-row" style="display:none;">
+        <div class="bl-form-row">
+          <label class="bl-form-label">Starting bankroll ($)</label>
+          <input class="bl-form-input" type="number" id="lg-bankroll" value="5000" />
+        </div>
+      </div>
+
+      <!-- PAYOUT -->
       <div class="bl-form-row">
         <label class="bl-form-label">Payout structure</label>
         <select class="bl-form-select" id="lg-payout">
@@ -396,10 +423,30 @@
           <option value="top-3">Top 3 Payout (60/30/10%)</option>
         </select>
       </div>
+
+      <!-- SPORTS -->
       <div class="bl-form-row">
-        <label class="bl-form-label">League password</label>
-        <input class="bl-form-input" type="text" id="lg-password" placeholder="e.g. GoPackGo" />
+        <label class="bl-form-label">Sports allowed</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <label class="sport-check"><input type="checkbox" value="NFL" checked /> NFL</label>
+          <label class="sport-check"><input type="checkbox" value="NBA" checked /> NBA</label>
+          <label class="sport-check"><input type="checkbox" value="MLB" checked /> MLB</label>
+          <label class="sport-check"><input type="checkbox" value="NHL" checked /> NHL</label>
+          <label class="sport-check"><input type="checkbox" value="Soccer" checked /> Soccer</label>
+          <label class="sport-check"><input type="checkbox" value="Golf" /> Golf</label>
+        </div>
       </div>
+
+      <!-- BET TYPES -->
+      <div class="bl-form-row">
+        <label class="bl-form-label">Bet types allowed</label>
+        <select class="bl-form-select" id="lg-bettypes">
+          <option value="straight">Straight bets only</option>
+          <option value="parlays">Straights + Parlays</option>
+          <option value="all">All bet types</option>
+        </select>
+      </div>
+
       <div class="bl-modal-actions">
         <button class="bl-btn-cancel" onclick="closeModal()">Cancel</button>
         <button class="bl-btn-confirm" onclick="createLeague()">Create League</button>
@@ -452,10 +499,34 @@
       { id:'g6', sport:'NHL', home:'Oilers', away:'Canucks', homeRec:'38-28-6', awayRec:'40-25-7', time:'10:00 PM ET', spread:{home:'+1.5',away:'-1.5',odds:'-175'}, ml:{home:'+145',away:'-175'}, ou:{total:'6.5',over:'-108',under:'-112'} },
     ];
 
+    let leagueType = 'weekly';
+
+    function setLeagueType(type) {
+      leagueType = type;
+      const wBtn = document.getElementById('type-weekly');
+      const sBtn = document.getElementById('type-season');
+      if (type === 'weekly') {
+        wBtn.style.border = '2px solid var(--bl-gold)'; wBtn.style.background = 'rgba(200,168,75,0.15)'; wBtn.style.color = 'var(--bl-gold)';
+        sBtn.style.border = '1px solid var(--bl-border)'; sBtn.style.background = 'var(--bl-surface2)'; sBtn.style.color = 'var(--bl-muted)';
+        document.getElementById('type-desc-weekly').style.display = 'block';
+        document.getElementById('type-desc-season').style.display = 'none';
+        document.getElementById('season-dates').style.display = 'none';
+        document.getElementById('bankroll-row').style.display = 'none';
+      } else {
+        sBtn.style.border = '2px solid var(--bl-gold)'; sBtn.style.background = 'rgba(200,168,75,0.15)'; sBtn.style.color = 'var(--bl-gold)';
+        wBtn.style.border = '1px solid var(--bl-border)'; wBtn.style.background = 'var(--bl-surface2)'; wBtn.style.color = 'var(--bl-muted)';
+        document.getElementById('type-desc-weekly').style.display = 'none';
+        document.getElementById('type-desc-season').style.display = 'block';
+        document.getElementById('season-dates').style.display = 'block';
+        document.getElementById('bankroll-row').style.display = 'block';
+      }
+    }
+
     function toggleEmojiPicker() {
       const p = document.getElementById('emoji-picker');
       p.style.display = p.style.display === 'none' ? 'flex' : 'none';
     }
+
     function setEmoji(e) {
       document.getElementById('lg-emoji').value = e;
       document.getElementById('emoji-display').textContent = e;
@@ -600,19 +671,41 @@
 
     async function createLeague() {
       const name = document.getElementById('lg-name').value.trim();
-      const buy_in = parseFloat(document.getElementById('lg-buyin').value) || 20;
-      const bankroll = parseFloat(document.getElementById('lg-bankroll').value) || 1000;
-      const payout_structure = document.getElementById('lg-payout').value;
       const password = document.getElementById('lg-password').value.trim();
+      const buy_in = parseFloat(document.getElementById('lg-buyin').value) || 20;
+      const payout_structure = document.getElementById('lg-payout').value;
+      const icon = document.getElementById('lg-emoji').value.trim() || '🏆';
+      const buyin_schedule = document.getElementById('lg-buyin-schedule').value;
+      const bet_types = document.getElementById('lg-bettypes').value;
+      const sports = Array.from(document.querySelectorAll('.sport-check input:checked')).map(el => el.value);
       if (!name) { showToast('Enter a league name!', true); return; }
       if (!password) { showToast('Enter a league password!', true); return; }
-      const icon = document.getElementById('lg-emoji').value.trim() || '🏆';
-      const { data: league, error } = await db.from('leagues').insert({ name, buy_in, bankroll, payout_structure, password, icon, created_by: currentUser.id }).select().single();
-      if (error) { showToast('Error creating league', true); return; }
+      if (!sports.length) { showToast('Select at least one sport!', true); return; }
+
+      let bankroll = 1000;
+      let week_start = null;
+      let week_end = null;
+
+      if (leagueType === 'season') {
+        bankroll = parseFloat(document.getElementById('lg-bankroll').value) || 5000;
+        week_start = document.getElementById('lg-start').value || null;
+        week_end = document.getElementById('lg-end').value || null;
+        if (!week_start || !week_end) { showToast('Set start and end dates!', true); return; }
+      }
+
+      const { data: league, error } = await db.from('leagues').insert({
+        name, buy_in, bankroll, payout_structure, password, icon,
+        league_type: leagueType, buyin_schedule, bet_types,
+        sports_allowed: sports.join(','),
+        week_start, week_end,
+        created_by: currentUser.id
+      }).select().single();
+
+      if (error) { showToast('Error creating league: ' + error.message, true); return; }
       await db.from('league_members').insert({ league_id: league.id, user_id: currentUser.id, balance: bankroll });
       closeModal();
       await loadLeagues();
-      showToast('League created! Group Name: ' + name + ' · Password: ' + password);
+      showToast('League created! Group: ' + name + ' · PW: ' + password);
     }
 
     function openJoinModal() { document.getElementById('join-modal').classList.add('open'); }
