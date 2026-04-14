@@ -328,6 +328,7 @@
       <!-- LEAGUES -->
       <div class="bl-panel" id="panel-leagues">
         <button class="bl-create-btn" onclick="openCreateLeague()">+ Create New League</button>
+        <button class="bl-create-btn" style="border-color:var(--bl-muted);color:var(--bl-muted);" onclick="openJoinModal()">Join Existing League</button>
         <div class="bl-section-title">Your leagues</div>
         <div id="leagues-list"><div class="bl-loading">Loading...</div></div>
       </div>
@@ -359,9 +360,33 @@
           <option value="top-3">Top 3 Payout (60/30/10%)</option>
         </select>
       </div>
+      <div class="bl-form-row">
+        <label class="bl-form-label">League password</label>
+        <input class="bl-form-input" type="text" id="lg-password" placeholder="e.g. GoPackGo" />
+      </div>
       <div class="bl-modal-actions">
         <button class="bl-btn-cancel" onclick="closeModal()">Cancel</button>
         <button class="bl-btn-confirm" onclick="createLeague()">Create League</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JOIN LEAGUE MODAL -->
+  <div class="bl-modal-overlay" id="join-modal">
+    <div class="bl-modal">
+      <div class="bl-modal-title">Join a League</div>
+      <div style="font-size:13px;color:var(--bl-muted);margin-bottom:16px;">Get the Group Name and Password from your league commissioner.</div>
+      <div class="bl-form-row">
+        <label class="bl-form-label">Group Name</label>
+        <input class="bl-form-input" type="text" id="join-name" placeholder="e.g. Goon Squad" />
+      </div>
+      <div class="bl-form-row">
+        <label class="bl-form-label">Password</label>
+        <input class="bl-form-input" type="text" id="join-password" placeholder="league password" />
+      </div>
+      <div class="bl-modal-actions">
+        <button class="bl-btn-cancel" onclick="closeJoinModal()">Cancel</button>
+        <button class="bl-btn-confirm" onclick="joinLeague()">Join League</button>
       </div>
     </div>
   </div>
@@ -517,13 +542,35 @@
       const buy_in = parseFloat(document.getElementById('lg-buyin').value) || 20;
       const bankroll = parseFloat(document.getElementById('lg-bankroll').value) || 1000;
       const payout_structure = document.getElementById('lg-payout').value;
+      const password = document.getElementById('lg-password').value.trim();
       if (!name) { showToast('Enter a league name!', true); return; }
-      const { data: league, error } = await db.from('leagues').insert({ name, buy_in, bankroll, payout_structure, created_by: currentUser.id }).select().single();
+      if (!password) { showToast('Enter a league password!', true); return; }
+      const { data: league, error } = await db.from('leagues').insert({ name, buy_in, bankroll, payout_structure, password, created_by: currentUser.id }).select().single();
       if (error) { showToast('Error creating league', true); return; }
       await db.from('league_members').insert({ league_id: league.id, user_id: currentUser.id, balance: bankroll });
       closeModal();
       await loadLeagues();
-      showToast('League created! Share the league name with friends to join.');
+      showToast('League created! Group Name: ' + name + ' · Password: ' + password);
+    }
+
+    function openJoinModal() { document.getElementById('join-modal').classList.add('open'); }
+    function closeJoinModal() { document.getElementById('join-modal').classList.remove('open'); }
+
+    async function joinLeague() {
+      const name = document.getElementById('join-name').value.trim();
+      const password = document.getElementById('join-password').value.trim();
+      if (!name || !password) { showToast('Enter group name and password!', true); return; }
+      const { data: leagues, error } = await db.from('leagues').select('*').ilike('name', name);
+      if (error || !leagues || leagues.length === 0) { showToast('League not found. Check the group name.', true); return; }
+      const league = leagues.find(l => l.password === password);
+      if (!league) { showToast('Wrong password. Try again.', true); return; }
+      const already = userLeagues.find(l => l.league_id === league.id);
+      if (already) { showToast('You are already in this league!', true); return; }
+      const { error: joinError } = await db.from('league_members').insert({ league_id: league.id, user_id: currentUser.id, balance: league.bankroll });
+      if (joinError) { showToast('Error joining league', true); return; }
+      closeJoinModal();
+      await loadLeagues();
+      showToast('You joined ' + league.name + '! Good luck.');
     }
 
     // ---- BETS ----
