@@ -192,6 +192,8 @@
     .bl-btn-cancel { flex: 1; background: none; border: 1px solid var(--bl-border); border-radius: 7px; color: var(--bl-muted); font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 10px; cursor: pointer; }
     .bl-btn-confirm { flex: 2; background: var(--bl-gold); border: none; border-radius: 7px; color: var(--bl-dark); font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 1px; padding: 10px; cursor: pointer; }
     .bl-loading { text-align: center; color: var(--bl-muted); font-size: 13px; padding: 20px 0; }
+    .emoji-opt { font-size: 22px; cursor: pointer; padding: 4px; border-radius: 6px; border: 1px solid var(--bl-border); background: var(--bl-surface2); transition: transform 0.1s; display: inline-block; }
+    .emoji-opt:hover { transform: scale(1.2); border-color: var(--bl-gold); }
     .bl-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--bl-green); color: #fff; font-size: 14px; font-weight: 500; padding: 12px 24px; border-radius: 24px; transition: transform 0.3s; z-index: 200; white-space: nowrap; }
     .bl-toast.error { background: var(--bl-red); }
     .bl-toast.show { transform: translateX(-50%) translateY(0); }
@@ -341,8 +343,35 @@
     <div class="bl-modal">
       <div class="bl-modal-title">Create a League</div>
       <div class="bl-form-row">
-        <label class="bl-form-label">League icon (tap to pick emoji)</label>
-        <input class="bl-form-input" type="text" id="lg-emoji" placeholder="tap here and pick an emoji 🏈" maxlength="2" style="font-size:24px;text-align:center;cursor:pointer;" onclick="this.select()" />
+        <label class="bl-form-label">League icon</label>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <input class="bl-form-input" type="text" id="lg-emoji" placeholder="🏆" maxlength="2" style="font-size:24px;text-align:center;width:60px;flex-shrink:0;" />
+          <span style="font-size:11px;color:var(--bl-muted);">Click one below or press <kbd style="background:var(--bl-surface2);border:1px solid var(--bl-border);border-radius:4px;padding:1px 5px;font-size:10px;">Win+.</kbd> (Windows) / <kbd style="background:var(--bl-surface2);border:1px solid var(--bl-border);border-radius:4px;padding:1px 5px;font-size:10px;">Cmd+Ctrl+Space</kbd> (Mac)</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          <span onclick="setEmoji('🏈')" class="emoji-opt">🏈</span>
+          <span onclick="setEmoji('⚽')" class="emoji-opt">⚽</span>
+          <span onclick="setEmoji('🏀')" class="emoji-opt">🏀</span>
+          <span onclick="setEmoji('⚾')" class="emoji-opt">⚾</span>
+          <span onclick="setEmoji('🏒')" class="emoji-opt">🏒</span>
+          <span onclick="setEmoji('🎾')" class="emoji-opt">🎾</span>
+          <span onclick="setEmoji('🏆')" class="emoji-opt">🏆</span>
+          <span onclick="setEmoji('💰')" class="emoji-opt">💰</span>
+          <span onclick="setEmoji('🎯')" class="emoji-opt">🎯</span>
+          <span onclick="setEmoji('🔥')" class="emoji-opt">🔥</span>
+          <span onclick="setEmoji('💪')" class="emoji-opt">💪</span>
+          <span onclick="setEmoji('🍺')" class="emoji-opt">🍺</span>
+          <span onclick="setEmoji('😈')" class="emoji-opt">😈</span>
+          <span onclick="setEmoji('🤑')" class="emoji-opt">🤑</span>
+          <span onclick="setEmoji('👑')" class="emoji-opt">👑</span>
+          <span onclick="setEmoji('🎲')" class="emoji-opt">🎲</span>
+          <span onclick="setEmoji('🐐')" class="emoji-opt">🐐</span>
+          <span onclick="setEmoji('🦁')" class="emoji-opt">🦁</span>
+          <span onclick="setEmoji('🐺')" class="emoji-opt">🐺</span>
+          <span onclick="setEmoji('💎')" class="emoji-opt">💎</span>
+          <span onclick="setEmoji('🚀')" class="emoji-opt">🚀</span>
+          <span onclick="setEmoji('🎰')" class="emoji-opt">🎰</span>
+        </div>
       </div>
       <div class="bl-form-row">
         <label class="bl-form-label">League name</label>
@@ -419,6 +448,8 @@
       { id:'g5', sport:'Soccer', home:'Man City', away:'Arsenal', homeRec:'18-3-2', awayRec:'19-3-1', time:'12:30 PM ET', spread:{home:'-0.5',away:'+0.5',odds:'+110'}, ml:{home:'-120',away:'+340'}, ou:{total:'2.5',over:'-130',under:'+105'} },
       { id:'g6', sport:'NHL', home:'Oilers', away:'Canucks', homeRec:'38-28-6', awayRec:'40-25-7', time:'10:00 PM ET', spread:{home:'+1.5',away:'-1.5',odds:'-175'}, ml:{home:'+145',away:'-175'}, ou:{total:'6.5',over:'-108',under:'-112'} },
     ];
+
+    function setEmoji(e) { document.getElementById("lg-emoji").value = e; }
 
     // ---- AUTH ----
     function switchAuthTab(tab, btn) {
