@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BettorsLeague</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bl-gold: #C8A84B;
+      --bl-dark: #0f1117;
+      --bl-surface: #161b26;
+      --bl-surface2: #1e2535;
+      --bl-border: rgba(200,168,75,0.18);
+      --bl-text: #e8e4d9;
+      --bl-muted: #7a8099;
+      --bl-green: #2ecc71;
+      --bl-red: #e74c3c;
+    }
+    body {
+      background: var(--bl-dark);
+      color: var(--bl-text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+    }
+    .bl-header {
+      background: var(--bl-surface);
+      border-bottom: 1px solid var(--bl-border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .bl-logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      color: var(--bl-gold);
+      letter-spacing: 2px;
+    }
+    .bl-logo span { color: var(--bl-text); }
+    .bl-wallet-amt .label {
+      font-size: 10px;
+      color: var(--bl-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .bl-wallet-amt .amount {
+      font-size: 22px;
+      font-family: 'Bebas Neue', sans-serif;
+      color: var(--bl-gold);
+      letter-spacing: 1px;
+      text-align: right;
+    }
+    .bl-week-badge {
+      background: var(--bl-surface2);
+      border: 1px solid var(--bl-border);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 11px;
+      color: var(--bl-muted);
+      text-align: center;
+      margin-right: 12px;
+    }
+    .bl-week-badge strong { display: block; color: var(--bl-text); font-size: 13px; }
+    .bl-nav {
+      display: flex;
+      background: var(--bl-surface);
+      border-bottom: 1px solid var(--bl-border);
+      padding: 0 24px;
+      gap: 4px;
+      overflow-x: auto;
+    }
+    .bl-nav-btn {
+      background: none;
+      border: none;
+      color: var(--bl-muted);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      padding: 12px 16px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+    }
+    .bl-nav-btn.active { color: var(--bl-gold); border-bottom-color: var(--bl-gold); }
+    .bl-nav-btn:hover:not(.active) { color: var(--bl-text); }
+    .bl-body { padding: 20px 24px; max-width: 900px; margin: 0 auto; }
+    .bl-panel { display: none; }
+    .bl-panel.active { display: block; }
+    .bl-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .bl-card {
+      background: var(--bl-surface);
+      border: 1px solid var(--bl-border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .bl-card-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--bl-muted); margin-bottom: 4px; }
+    .bl-card-value { font-family: 'Bebas Neue', sans-serif; font-size: 30px; color: var(--bl-gold); letter-spacing: 1px; }
+    .bl-card-sub { font-size: 11px; color: var(--bl-muted); margin-top: 2px; }
+    .bl-section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--bl-muted);
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--bl-border);
+      padding-bottom: 6px;
+    }
+    .bl-leaderboard-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .bl-rank { font-family: 'Bebas Neue', sans-serif; font-size: 22px; width: 28px; color: var(--bl-muted); }
+    .bl-rank.gold { color: #C8A84B; }
+    .bl-rank.silver { color: #9ba3b8; }
+    .bl-rank.bronze { color: #c97d3a; }
+    .bl-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 500; flex-shrink: 0;
+    }
+    .bl-member-info { flex: 1; }
+    .bl-member-name { font-size: 14px; font-weight: 500; }
+    .bl-member-meta { font-size: 11px; color: var(--bl-muted); }
+    .bl-member-balance { text-align: right; }
+    .bl-member-balance .bal { font-family: 'Bebas Neue', sans-serif; font-size: 20px; }
+    .bl-member-balance .chg { font-size: 11px; }
+    .positive { color: var(--bl-green); }
+    .negative { color: var(--bl-red); }
+    .bl-odds-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+    .bl-sport-tab {
+      background: var(--bl-surface2);
+      border: 1px solid var(--bl-border);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 12px;
+      color: var(--bl-muted);
+      cursor: pointer;
+    }
+    .bl-sport-tab.active { background: var(--bl-gold); color: var(--bl-dark); border-color: var(--bl-gold); font-weight: 500; }
+    .bl-game-card {
+      background: var(--bl-surface);
+      border: 1px solid var(--bl-border);
+      border-radius: 10px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .bl-game-header {
+      padding: 8px 16px;
+      background: var(--bl-surface2);
+      border-bottom: 1px solid var(--bl-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .bl-game-league { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--bl-gold); }
+    .bl-game-time { font-size: 10px; color: var(--bl-muted); }
+    .bl-game-body { padding: 14px 16px; }
+    .bl-matchup { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .bl-team-name { font-size: 15px; font-weight: 500; }
+    .bl-team-record { font-size: 11px; color: var(--bl-muted); }
+    .bl-vs { font-size: 11px; color: var(--bl-muted); padding: 0 12px; }
+    .bl-bet-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .bl-bet-btn {
+      background: var(--bl-surface2);
+      border: 1px solid var(--bl-border);
+      border-radius: 8px;
+      padding: 10px 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .bl-bet-btn:hover { border-color: var(--bl-gold); background: rgba(200,168,75,0.08); }
+    .bl-bet-btn.selected { border-color: var(--bl-gold); background: rgba(200,168,75,0.15); }
+    .bl-bet-type { font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--bl-muted); margin-bottom: 3px; }
+    .bl-bet-line { font-size: 13px; font-weight: 500; color: var(--bl-text); }
+    .bl-bet-odds { font-size: 13px; color: var(--bl-gold); font-weight: 500; }
+    .bl-betslip {
+      background: var(--bl-surface2);
+      border: 1px solid var(--bl-border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .bl-betslip-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .bl-betslip-title { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 1px; color: var(--bl-gold); }
+    .bl-betslip-count {
+      background: var(--bl-gold); color: var(--bl-dark);
+      border-radius: 10px; font-size: 11px; font-weight: 500; padding: 2px 8px;
+    }
+    .bl-slip-item {
+      border: 1px solid var(--bl-border);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+      background: var(--bl-surface);
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .bl-slip-info { flex: 1; }
+    .bl-slip-game { font-size: 12px; color: var(--bl-muted); margin-bottom: 2px; }
+    .bl-slip-pick { font-size: 13px; font-weight: 500; }
+    .bl-slip-odds { color: var(--bl-gold); font-size: 13px; }
+    .bl-slip-wager { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .bl-wager-input {
+      background: var(--bl-surface2);
+      border: 1px solid var(--bl-border);
+      border-radius: 6px;
+      color: var(--bl-text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      padding: 4px 8px;
+      width: 80px;
+    }
+    .bl-wager-input:focus { outline: none; border-color: var(--bl-gold); }
+    .bl-win-preview { font-size: 11px; color: var(--bl-green); }
+    .bl-remove-btn { background: none; border: none; color: var(--bl-muted); cursor: pointer; font-size: 18px; padding: 0; line-height: 1; }
+    .bl-remove-btn:hover { color: var(--bl-red); }
+    .bl-slip-totals {
+      border-top: 1px solid var(--bl-border);
+      padding-top: 10px;
+      margin-top: 4px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--bl-muted);
+    }
+    .bl-slip-totals span:last-child { color: var(--bl-green); font-weight: 500; }
+    .bl-place-btn {
+      width: 100%;
+      background: var(--bl-gold);
+      color: var(--bl-dark);
+      border: none;
+      border-radius: 8px;
+      padding: 13px;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      margin-top: 12px;
+      transition: all 0.15s;
+    }
+    .bl-place-btn:hover { background: #d4af5c; }
+    .bl-open-bets-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .bl-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .bl-status-dot.live { background: var(--bl-green); }
+    .bl-status-dot.pending { background: var(--bl-gold); }
+    .bl-status-dot.won { background: var(--bl-green); }
+    .bl-status-dot.lost { background: var(--bl-red); }
+    .bl-bet-info { flex: 1; }
+    .bl-bet-desc { font-size: 13px; }
+    .bl-bet-meta { font-size: 11px; color: var(--bl-muted); }
+    .bl-bet-result { text-align: right; font-family: 'Bebas Neue', sans-serif; font-size: 18px; }
+    .bl-league-card {
+      background: var(--bl-surface);
+      border: 1px solid var(--bl-border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .bl-league-card:hover { border-color: var(--bl-gold); }
+    .bl-league-icon {
+      width: 48px; height: 48px; border-radius: 10px;
+      background: rgba(200,168,75,0.12);
+      border: 1px solid var(--bl-border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Bebas Neue', sans-serif; font-size: 18px; color: var(--bl-gold); flex-shrink: 0;
+    }
+    .bl-league-info { flex: 1; }
+    .bl-league-name { font-size: 15px; font-weight: 500; }
+    .bl-league-meta { font-size: 11px; color: var(--bl-muted); margin-top: 2px; }
+    .bl-league-prize { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--bl-gold); }
+    .bl-league-type { font-size: 10px; color: var(--bl-muted); }
+    .bl-create-btn {
+      width: 100%;
+      background: none;
+      border: 1px dashed var(--bl-gold);
+      border-radius: 10px;
+      padding: 14px;
+      color: var(--bl-gold);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 16px;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.15s;
+      margin-bottom: 12px;
+    }
+    .bl-create-btn:hover { background: rgba(200,168,75,0.08); }
+    .bl-modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .bl-modal-overlay.open { display: flex; }
+    .bl-modal {
+      background: var(--bl-surface);
+      border: 1px solid var(--bl-border);
+      border-radius: 12px;
+      padding: 24px;
+      width: 90%;
+      max-width: 400px;
+    }
+    .bl-modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 24px; color: var(--bl-gold); letter-spacing: 1px; margin-bottom: 18px; }
+    .bl-form-row { margin-bottom: 14px; }
+    .bl-form-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--bl-muted); margin-bottom: 6px; display: block; }
+    .bl-form-input, .bl-form-select {
+      width: 100%;
+      background: var(--bl-surface2);
+      border: 1px solid var(--bl-border);
+      border-radius: 7px;
+      color: var(--bl-text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      padding: 9px 12px;
+    }
+    .bl-form-input:focus, .bl-form-select:focus { outline: none; border-color: var(--bl-gold); }
+    .bl-form-select option { background: var(--bl-surface); }
+    .payout-option {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px;
+      border: 1px solid var(--bl-border);
+      border-radius: 7px; margin-bottom: 6px; cursor: pointer;
+    }
+    .payout-option.selected { border-color: var(--bl-gold); background: rgba(200,168,75,0.08); }
+    .payout-option input { accent-color: var(--bl-gold); }
+    .payout-option label { font-size: 13px; cursor: pointer; }
+    .bl-modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+    .bl-btn-cancel {
+      flex: 1; background: none; border: 1px solid var(--bl-border);
+      border-radius: 7px; color: var(--bl-muted); font-family: 'DM Sans', sans-serif;
+      font-size: 14px; padding: 10px; cursor: pointer;
+    }
+    .bl-btn-confirm {
+      flex: 2; background: var(--bl-gold); border: none; border-radius: 7px;
+      color: var(--bl-dark); font-family: 'Bebas Neue', sans-serif;
+      font-size: 18px; letter-spacing: 1px; padding: 10px; cursor: pointer;
+    }
+    .bl-toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--bl-green); color: #fff;
+      font-size: 14px; font-weight: 500;
+      padding: 12px 24px; border-radius: 24px;
+      transition: transform 0.3s; z-index: 200; white-space: nowrap;
+    }
+    .bl-toast.show { transform: translateX(-50%) translateY(0); }
+    @media (max-width: 600px) {
+      .bl-grid-3 { grid-template-columns: 1fr 1fr; }
+      .bl-bet-options { grid-template-columns: repeat(2, 1fr); }
+      .bl-body { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bl-header">
+    <div class="bl-logo">Bettors<span>League</span></div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="bl-week-badge">
+        <span>Week 15</span>
+        <strong id="countdown">--</strong>
+      </div>
+      <div class="bl-wallet-amt">
+        <div class="label">Your bankroll</div>
+        <div class="amount" id="wallet-display">$742.50</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bl-nav">
+    <button class="bl-nav-btn active" onclick="switchTab('dashboard', this)">Dashboard</button>
+    <button class="bl-nav-btn" onclick="switchTab('bet', this)">Place Bets</button>
+    <button class="bl-nav-btn" onclick="switchTab('mybets', this)">My Bets</button>
+    <button class="bl-nav-btn" onclick="switchTab('leagues', this)">Leagues</button>
+  </div>
+
+  <div class="bl-body">
+
+    <!-- DASHBOARD -->
+    <div class="bl-panel active" id="panel-dashboard">
+      <div class="bl-grid-3">
+        <div class="bl-card">
+          <div class="bl-card-label">Weekly pool</div>
+          <div class="bl-card-value">$140</div>
+          <div class="bl-card-sub">7 members × $20</div>
+        </div>
+        <div class="bl-card">
+          <div class="bl-card-label">Your rank</div>
+          <div class="bl-card-value">#2</div>
+          <div class="bl-card-sub">of 7 players</div>
+        </div>
+        <div class="bl-card">
+          <div class="bl-card-label">Open bets</div>
+          <div class="bl-card-value">4</div>
+          <div class="bl-card-sub">$215 at risk</div>
+        </div>
+      </div>
+      <div class="bl-section-title">Sunday Night Crew — Leaderboard</div>
+      <div id="leaderboard-list"></div>
+    </div>
+
+    <!-- PLACE BETS -->
+    <div class="bl-panel" id="panel-bet">
+      <div class="bl-betslip">
+        <div class="bl-betslip-header">
+          <div class="bl-betslip-title">Bet Slip</div>
+          <div class="bl-betslip-count" id="slip-count">0</div>
+        </div>
+        <div id="slip-items">
+          <div style="font-size:12px;color:var(--bl-muted);text-align:center;padding:10px 0;">Select a bet below to add it here</div>
+        </div>
+        <div id="slip-footer" style="display:none;">
+          <div class="bl-slip-totals"><span>Total wager</span><span id="total-wager">$0</span></div>
+          <div class="bl-slip-totals" style="margin-top:4px;"><span>To win</span><span id="total-win">$0</span></div>
+          <button class="bl-place-btn" onclick="placeBets()">Place Bets</button>
+        </div>
+      </div>
+      <div class="bl-odds-tabs">
+        <button class="bl-sport-tab active" onclick="filterSport('all', this)">All</button>
+        <button class="bl-sport-tab" onclick="filterSport('NBA', this)">NBA</button>
+        <button class="bl-sport-tab" onclick="filterSport('NHL', this)">NHL</button>
+        <button class="bl-sport-tab" onclick="filterSport('MLB', this)">MLB</button>
+        <button class="bl-sport-tab" onclick="filterSport('NFL', this)">NFL</button>
+        <button class="bl-sport-tab" onclick="filterSport('Soccer', this)">Soccer</button>
+      </div>
+      <div id="games-list"></div>
+    </div>
+
+    <!-- MY BETS -->
+    <div class="bl-panel" id="panel-mybets">
+      <div class="bl-section-title">Open bets</div>
+      <div id="open-bets-list"></div>
+      <div class="bl-section-title" style="margin-top:20px;">Settled this week</div>
+      <div id="settled-bets-list"></div>
+    </div>
+
+    <!-- LEAGUES -->
+    <div class="bl-panel" id="panel-leagues">
+      <button class="bl-create-btn" onclick="openCreateLeague()">+ Create New League</button>
+      <div class="bl-section-title">Your leagues</div>
+      <div id="leagues-list"></div>
+    </div>
+
+  </div>
+
+  <!-- CREATE LEAGUE MODAL -->
+  <div class="bl-modal-overlay" id="create-modal">
+    <div class="bl-modal">
+      <div class="bl-modal-title">Create a League</div>
+      <div class="bl-form-row">
+        <label class="bl-form-label">League name</label>
+        <input class="bl-form-input" type="text" id="lg-name" placeholder="e.g. Sunday Night Crew" />
+      </div>
+      <div class="bl-form-row">
+        <label class="bl-form-label">Weekly buy-in ($)</label>
+        <input class="bl-form-input" type="number" id="lg-buyin" value="20" />
+      </div>
+      <div class="bl-form-row">
+        <label class="bl-form-label">Starting bankroll ($)</label>
+        <input class="bl-form-input" type="number" id="lg-bankroll" value="1000" />
+      </div>
+      <div class="bl-form-row">
+        <label class="bl-form-label">Payout structure</label>
+        <div class="payout-option selected" onclick="selectPayout(this)">
+          <input type="radio" name="payout" checked /> <label>Winner take all</label>
+        </div>
+        <div class="payout-option" onclick="selectPayout(this)">
+          <input type="radio" name="payout" /> <label>Top half pays bottom half</label>
+        </div>
+        <div class="payout-option" onclick="selectPayout(this)">
+          <input type="radio" name="payout" /> <label>Top 3 payout (60 / 30 / 10%)</label>
+        </div>
+      </div>
+      <div class="bl-form-row">
+        <label class="bl-form-label">Invite friends (emails, comma separated)</label>
+        <input class="bl-form-input" type="text" id="lg-invites" placeholder="friend@email.com, friend2@email.com" />
+      </div>
+      <div class="bl-modal-actions">
+        <button class="bl-btn-cancel" onclick="closeModal()">Cancel</button>
+        <button class="bl-btn-confirm" onclick="createLeague()">Create League</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="bl-toast" id="toast"></div>
+
+  <script>
+    const GAMES = [
+      { id:1, sport:'NBA', home:'Celtics', away:'Knicks', homeRec:'47-18', awayRec:'41-24', time:'7:30 PM ET', spread:{home:'-4.5',away:'+4.5',odds:'-110'}, ml:{home:'-190',away:'+158'}, ou:{total:'219.5',over:'-112',under:'-108'} },
+      { id:2, sport:'NBA', home:'Lakers', away:'Warriors', homeRec:'35-30', awayRec:'30-35', time:'10:00 PM ET', spread:{home:'-1.5',away:'+1.5',odds:'-110'}, ml:{home:'-125',away:'+105'}, ou:{total:'227.5',over:'-110',under:'-110'} },
+      { id:3, sport:'NHL', home:'Rangers', away:'Bruins', homeRec:'41-22-8', awayRec:'38-26-9', time:'7:00 PM ET', spread:{home:'-1.5',away:'+1.5',odds:'+130'}, ml:{home:'-155',away:'+130'}, ou:{total:'6.0',over:'-110',under:'-110'} },
+      { id:4, sport:'MLB', home:'Yankees', away:'Red Sox', homeRec:'12-8', awayRec:'9-11', time:'1:05 PM ET', spread:{home:'-1.5',away:'+1.5',odds:'+135'}, ml:{home:'-165',away:'+140'}, ou:{total:'8.5',over:'-112',under:'-108'} },
+      { id:5, sport:'Soccer', home:'Man City', away:'Arsenal', homeRec:'18-3-2', awayRec:'19-3-1', time:'12:30 PM ET', spread:{home:'-0.5',away:'+0.5',odds:'+110'}, ml:{home:'-120',away:'+340'}, ou:{total:'2.5',over:'-130',under:'+105'} },
+      { id:6, sport:'NHL', home:'Oilers', away:'Canucks', homeRec:'38-28-6', awayRec:'40-25-7', time:'10:00 PM ET', spread:{home:'+1.5',away:'-1.5',odds:'-175'}, ml:{home:'+145',away:'-175'}, ou:{total:'6.5',over:'-108',under:'-112'} },
+    ];
+    const MEMBERS = [
+      { name:'You', init:'YO', color:'#C8A84B', colorBg:'rgba(200,168,75,0.15)', bal:742.50, chg:+42.50, bets:8 },
+      { name:'Marcus T.', init:'MT', color:'#3b82f6', colorBg:'rgba(59,130,246,0.15)', bal:891.00, chg:+91.00, bets:12 },
+      { name:'Jess R.', init:'JR', color:'#2ecc71', colorBg:'rgba(46,204,113,0.15)', bal:688.00, chg:-112.00, bets:6 },
+      { name:'Dev P.', init:'DP', color:'#a855f7', colorBg:'rgba(168,85,247,0.15)', bal:614.00, chg:-186.00, bets:5 },
+      { name:'Sam K.', init:'SK', color:'#f97316', colorBg:'rgba(249,115,22,0.15)', bal:1050.00, chg:+50.00, bets:9 },
+      { name:'Priya M.', init:'PM', color:'#ec4899', colorBg:'rgba(236,72,153,0.15)', bal:770.00, chg:+70.00, bets:7 },
+      { name:'Chris L.', init:'CL', color:'#14b8a6', colorBg:'rgba(20,184,166,0.15)', bal:503.50, chg:-296.50, bets:11 },
+    ];
+    const LEAGUES = [
+      { name:'Sunday Night Crew', members:7, buyin:20, bankroll:1000, payout:'Winner Take All', pool:140, icon:'SNC' },
+      { name:'Work Degenerates', members:5, buyin:10, bankroll:500, payout:'Top Half Pays', pool:50, icon:'WD' },
+    ];
+    const OPEN_BETS = [
+      { game:'Celtics vs Knicks', pick:'Celtics -4.5', odds:'-110', wager:75, toWin:68.18, status:'live' },
+      { game:'Rangers vs Bruins', pick:'Over 6.0', odds:'-110', wager:50, toWin:45.45, status:'live' },
+      { game:'Man City vs Arsenal', pick:'Man City ML', odds:'-120', wager:60, toWin:50, status:'pending' },
+      { game:'Lakers vs Warriors', pick:'Under 227.5', odds:'-110', wager:30, toWin:27.27, status:'pending' },
+    ];
+    const SETTLED_BETS = [
+      { game:'Nuggets vs Suns', pick:'Nuggets -3.5', odds:'-110', wager:50, result:+45.45, status:'won' },
+      { game:'Bruins vs Leafs', pick:'Bruins ML', odds:'+120', wager:40, result:+48, status:'won' },
+      { game:'Warriors vs Clippers', pick:'Warriors ML', odds:'-140', wager:70, result:-70, status:'lost' },
+    ];
+
+    let slipItems = [];
+    let currentWallet = 742.50;
+    let currentSport = 'all';
+
+    function switchTab(tab, btn) {
+      document.querySelectorAll('.bl-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.bl-nav-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('panel-' + tab).classList.add('active');
+      btn.classList.add('active');
+    }
+
+    function filterSport(sport, el) {
+      currentSport = sport;
+      document.querySelectorAll('.bl-sport-tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      renderGames();
+    }
+
+    function calcWin(wager, odds) {
+      const w = parseFloat(wager) || 0;
+      const o = parseInt(odds);
+      return o > 0 ? (w * o / 100) : (w * 100 / Math.abs(o));
+    }
+
+    function renderGames() {
+      const list = document.getElementById('games-list');
+      const filtered = currentSport === 'all' ? GAMES : GAMES.filter(g => g.sport === currentSport);
+      list.innerHTML = filtered.map(g => `
+        <div class="bl-game-card">
+          <div class="bl-game-header">
+            <div class="bl-game-league">${g.sport}</div>
+            <div class="bl-game-time">${g.time}</div>
+          </div>
+          <div class="bl-game-body">
+            <div class="bl-matchup">
+              <div class="bl-team">
+                <div class="bl-team-name">${g.away}</div>
+                <div class="bl-team-record">${g.awayRec}</div>
+              </div>
+              <div class="bl-vs">@</div>
+              <div class="bl-team" style="text-align:right;">
+                <div class="bl-team-name">${g.home}</div>
+                <div class="bl-team-record">${g.homeRec}</div>
+              </div>
+            </div>
+            <div class="bl-bet-options">
+              <div class="bl-bet-btn" id="btn-${g.id}-spread-away" onclick="toggleBet(${g.id},'spread-away','${g.away} ${g.spread.away}','${g.spread.odds}')">
+                <div class="bl-bet-type">Spread</div>
+                <div class="bl-bet-line">${g.away} ${g.spread.away}</div>
+                <div class="bl-bet-odds">${g.spread.odds}</div>
+              </div>
+              <div class="bl-bet-btn" id="btn-${g.id}-ml-away" onclick="toggleBet(${g.id},'ml-away','${g.away} ML','${g.ml.away}')">
+                <div class="bl-bet-type">Moneyline</div>
+                <div class="bl-bet-line">${g.away}</div>
+                <div class="bl-bet-odds">${g.ml.away}</div>
+              </div>
+              <div class="bl-bet-btn" id="btn-${g.id}-ou-over" onclick="toggleBet(${g.id},'ou-over','Over ${g.ou.total}','${g.ou.over}')">
+                <div class="bl-bet-type">Over/Under</div>
+                <div class="bl-bet-line">O ${g.ou.total}</div>
+                <div class="bl-bet-odds">${g.ou.over}</div>
+              </div>
+              <div class="bl-bet-btn" id="btn-${g.id}-spread-home" onclick="toggleBet(${g.id},'spread-home','${g.home} ${g.spread.home}','${g.spread.odds}')">
+                <div class="bl-bet-type">Spread</div>
+                <div class="bl-bet-line">${g.home} ${g.spread.home}</div>
+                <div class="bl-bet-odds">${g.spread.odds}</div>
+              </div>
+              <div class="bl-bet-btn" id="btn-${g.id}-ml-home" onclick="toggleBet(${g.id},'ml-home','${g.home} ML','${g.ml.home}')">
+                <div class="bl-bet-type">Moneyline</div>
+                <div class="bl-bet-line">${g.home}</div>
+                <div class="bl-bet-odds">${g.ml.home}</div>
+              </div>
+              <div class="bl-bet-btn" id="btn-${g.id}-ou-under" onclick="toggleBet(${g.id},'ou-under','Under ${g.ou.total}','${g.ou.under}')">
+                <div class="bl-bet-type">Over/Under</div>
+                <div class="bl-bet-line">U ${g.ou.total}</div>
+                <div class="bl-bet-odds">${g.ou.under}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function toggleBet(gameId, betKey, pick, odds) {
+      const existing = slipItems.findIndex(s => s.gameId === gameId && s.betKey === betKey);
+      if (existing > -1) {
+        slipItems.splice(existing, 1);
+        document.getElementById(`btn-${gameId}-${betKey}`).classList.remove('selected');
+      } else {
+        const sameGame = slipItems.findIndex(s => s.gameId === gameId);
+        if (sameGame > -1) {
+          const old = slipItems[sameGame];
+          document.getElementById(`btn-${old.gameId}-${old.betKey}`).classList.remove('selected');
+          slipItems.splice(sameGame, 1);
+        }
+        const game = GAMES.find(g => g.id === gameId);
+        slipItems.push({ gameId, betKey, pick, odds, game: `${game.away} @ ${game.home}`, wager: 50 });
+        document.getElementById(`btn-${gameId}-${betKey}`).classList.add('selected');
+      }
+      renderSlip();
+    }
+
+    function renderSlip() {
+      document.getElementById('slip-count').textContent = slipItems.length;
+      const itemsEl = document.getElementById('slip-items');
+      const footerEl = document.getElementById('slip-footer');
+      if (slipItems.length === 0) {
+        itemsEl.innerHTML = '<div style="font-size:12px;color:var(--bl-muted);text-align:center;padding:10px 0;">Select a bet below to add it here</div>';
+        footerEl.style.display = 'none';
+        return;
+      }
+      itemsEl.innerHTML = slipItems.map((s, i) => `
+        <div class="bl-slip-item">
+          <div class="bl-slip-info">
+            <div class="bl-slip-game">${s.game}</div>
+            <div class="bl-slip-pick">${s.pick} <span class="bl-slip-odds">${s.odds}</span></div>
+            <div class="bl-slip-wager">
+              <span style="font-size:11px;color:var(--bl-muted);">Wager $</span>
+              <input class="bl-wager-input" type="number" value="${s.wager}" min="1" onchange="updateWager(${i}, this.value)" />
+              <span class="bl-win-preview">Win $${calcWin(s.wager, s.odds).toFixed(2)}</span>
+            </div>
+          </div>
+          <button class="bl-remove-btn" onclick="removeBet(${i})">×</button>
+        </div>
+      `).join('');
+      const totalWager = slipItems.reduce((a,s) => a + parseFloat(s.wager), 0);
+      const totalWin = slipItems.reduce((a,s) => a + calcWin(s.wager, s.odds), 0);
+      document.getElementById('total-wager').textContent = '$' + totalWager.toFixed(2);
+      document.getElementById('total-win').textContent = '+$' + totalWin.toFixed(2);
+      footerEl.style.display = 'block';
+    }
+
+    function updateWager(i, val) { slipItems[i].wager = parseFloat(val) || 0; renderSlip(); }
+
+    function removeBet(i) {
+      const s = slipItems[i];
+      document.getElementById(`btn-${s.gameId}-${s.betKey}`).classList.remove('selected');
+      slipItems.splice(i, 1);
+      renderSlip();
+    }
+
+    function placeBets() {
+      if (!slipItems.length) return;
+      const total = slipItems.reduce((a,s) => a + parseFloat(s.wager), 0);
+      if (total > currentWallet) { showToast('Insufficient bankroll!'); return; }
+      currentWallet -= total;
+      document.getElementById('wallet-display').textContent = '$' + currentWallet.toFixed(2);
+      slipItems.forEach(s => document.getElementById(`btn-${s.gameId}-${s.betKey}`).classList.remove('selected'));
+      slipItems = [];
+      renderSlip();
+      showToast('Bets placed! Good luck.');
+    }
+
+    function renderLeaderboard() {
+      const sorted = [...MEMBERS].sort((a,b) => b.bal - a.bal);
+      const rankClasses = ['gold','silver','bronze','','','',''];
+      document.getElementById('leaderboard-list').innerHTML = sorted.map((m,i) => `
+        <div class="bl-leaderboard-row">
+          <div class="bl-rank ${rankClasses[i]}">${i+1}</div>
+          <div class="bl-avatar" style="background:${m.colorBg};color:${m.color};">${m.init}</div>
+          <div class="bl-member-info">
+            <div class="bl-member-name">${m.name}</div>
+            <div class="bl-member-meta">${m.bets} bets placed</div>
+          </div>
+          <div class="bl-member-balance">
+            <div class="bal" style="color:${m.color};">$${m.bal.toFixed(2)}</div>
+            <div class="chg ${m.chg >= 0 ? 'positive' : 'negative'}">${m.chg >= 0 ? '+' : ''}$${Math.abs(m.chg).toFixed(2)}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderMyBets() {
+      document.getElementById('open-bets-list').innerHTML = OPEN_BETS.map(b => `
+        <div class="bl-open-bets-row">
+          <div class="bl-status-dot ${b.status}"></div>
+          <div class="bl-bet-info">
+            <div class="bl-bet-desc">${b.pick} <span style="color:var(--bl-gold)">${b.odds}</span></div>
+            <div class="bl-bet-meta">${b.game} · Wagered $${b.wager}</div>
+          </div>
+          <div class="bl-bet-result positive">+$${b.toWin.toFixed(2)}</div>
+        </div>
+      `).join('');
+      document.getElementById('settled-bets-list').innerHTML = SETTLED_BETS.map(b => `
+        <div class="bl-open-bets-row">
+          <div class="bl-status-dot ${b.status}"></div>
+          <div class="bl-bet-info">
+            <div class="bl-bet-desc">${b.pick} <span style="color:var(--bl-gold)">${b.odds}</span></div>
+            <div class="bl-bet-meta">${b.game} · Wagered $${b.wager}</div>
+          </div>
+          <div class="bl-bet-result ${b.result >= 0 ? 'positive' : 'negative'}">${b.result >= 0 ? '+' : ''}$${Math.abs(b.result).toFixed(2)}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderLeagues() {
+      document.getElementById('leagues-list').innerHTML = LEAGUES.map(l => `
+        <div class="bl-league-card">
+          <div class="bl-league-icon">${l.icon}</div>
+          <div class="bl-league-info">
+            <div class="bl-league-name">${l.name}</div>
+            <div class="bl-league-meta">${l.members} members · $${l.bankroll} bankroll · resets Mon 12am</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="bl-league-prize">$${l.pool}</div>
+            <div class="bl-league-type">${l.payout}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openCreateLeague() { document.getElementById('create-modal').classList.add('open'); }
+    function closeModal() { document.getElementById('create-modal').classList.remove('open'); }
+
+    function selectPayout(el) {
+      document.querySelectorAll('.payout-option').forEach(o => { o.classList.remove('selected'); o.querySelector('input').checked = false; });
+      el.classList.add('selected'); el.querySelector('input').checked = true;
+    }
+
+    function createLeague() {
+      const name = document.getElementById('lg-name').value || 'New League';
+      const buyin = parseInt(document.getElementById('lg-buyin').value) || 20;
+      const bankroll = parseInt(document.getElementById('lg-bankroll').value) || 1000;
+      const payoutEl = document.querySelector('.payout-option.selected label');
+      const payout = payoutEl ? payoutEl.textContent : 'Winner Take All';
+      LEAGUES.push({ name, members:1, buyin, bankroll, payout, pool:buyin, icon:name.substring(0,2).toUpperCase() });
+      renderLeagues();
+      closeModal();
+      showToast('League created! Invites sent.');
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function updateCountdown() {
+      const now = new Date();
+      const sunday = new Date();
+      sunday.setDate(now.getDate() + (7 - now.getDay()) % 7);
+      sunday.setHours(12, 0, 0, 0);
+      if (sunday <= now) sunday.setDate(sunday.getDate() + 7);
+      const diff = sunday - now;
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      document.getElementById('countdown').textContent = d + 'd ' + h + 'h left';
+    }
+
+    renderLeaderboard();
+    renderGames();
+    renderMyBets();
+    renderLeagues();
+    updateCountdown();
+    setInterval(updateCountdown, 60000);
+  </script>
+</body>
+</html>
