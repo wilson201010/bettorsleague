@@ -83,8 +83,7 @@
     .bl-logo { font-family: 'Bebas Neue', sans-serif; font-size: 28px; color: var(--bl-gold); letter-spacing: 2px; }
     .bl-logo span { color: var(--bl-text); }
     .bl-header-right { display: flex; align-items: center; gap: 14px; }
-    .bl-wallet-amt .label { font-size: 10px; color: var(--bl-muted); text-transform: uppercase; letter-spacing: 1px; }
-    .bl-wallet-amt .amount { font-size: 22px; font-family: 'Bebas Neue', sans-serif; color: var(--bl-gold); letter-spacing: 1px; text-align: right; }
+    .bl-username { font-size: 14px; font-weight: 500; color: var(--bl-gold); }
     .bl-signout-btn {
       background: none; border: 1px solid var(--bl-border); border-radius: 6px;
       color: var(--bl-muted); font-family: 'DM Sans', sans-serif; font-size: 12px;
@@ -248,10 +247,7 @@
     <div class="bl-header">
       <div class="bl-logo">Bettors<span>League</span></div>
       <div class="bl-header-right">
-        <div class="bl-wallet-amt">
-          <div class="label">Your bankroll</div>
-          <div class="amount" id="wallet-display">$1,000.00</div>
-        </div>
+        <div class="bl-username" id="header-username"></div>
         <button class="bl-signout-btn" onclick="signOut()">Sign Out</button>
       </div>
     </div>
@@ -447,7 +443,10 @@
 
     async function loadProfile() {
       const { data } = await db.from('profiles').select('*').eq('id', currentUser.id).single();
-      if (data) { currentProfile = data; }
+      if (data) {
+        currentProfile = data;
+        document.getElementById('header-username').textContent = 'Hey, ' + data.username;
+      }
     }
 
     // ---- DASHBOARD ----
