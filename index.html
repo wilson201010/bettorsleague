@@ -490,14 +490,88 @@
     let currentSport = 'all';
     let currentBalance = 1000;
 
-    const GAMES = [
-      { id:'g1', sport:'NBA', home:'Celtics', away:'Knicks', homeRec:'47-18', awayRec:'41-24', time:'7:30 PM ET', spread:{home:'-4.5',away:'+4.5',odds:'-110'}, ml:{home:'-190',away:'+158'}, ou:{total:'219.5',over:'-112',under:'-108'} },
-      { id:'g2', sport:'NBA', home:'Lakers', away:'Warriors', homeRec:'35-30', awayRec:'30-35', time:'10:00 PM ET', spread:{home:'-1.5',away:'+1.5',odds:'-110'}, ml:{home:'-125',away:'+105'}, ou:{total:'227.5',over:'-110',under:'-110'} },
-      { id:'g3', sport:'NHL', home:'Rangers', away:'Bruins', homeRec:'41-22-8', awayRec:'38-26-9', time:'7:00 PM ET', spread:{home:'-1.5',away:'+1.5',odds:'+130'}, ml:{home:'-155',away:'+130'}, ou:{total:'6.0',over:'-110',under:'-110'} },
-      { id:'g4', sport:'MLB', home:'Yankees', away:'Red Sox', homeRec:'12-8', awayRec:'9-11', time:'1:05 PM ET', spread:{home:'-1.5',away:'+1.5',odds:'+135'}, ml:{home:'-165',away:'+140'}, ou:{total:'8.5',over:'-112',under:'-108'} },
-      { id:'g5', sport:'Soccer', home:'Man City', away:'Arsenal', homeRec:'18-3-2', awayRec:'19-3-1', time:'12:30 PM ET', spread:{home:'-0.5',away:'+0.5',odds:'+110'}, ml:{home:'-120',away:'+340'}, ou:{total:'2.5',over:'-130',under:'+105'} },
-      { id:'g6', sport:'NHL', home:'Oilers', away:'Canucks', homeRec:'38-28-6', awayRec:'40-25-7', time:'10:00 PM ET', spread:{home:'+1.5',away:'-1.5',odds:'-175'}, ml:{home:'+145',away:'-175'}, ou:{total:'6.5',over:'-108',under:'-112'} },
-    ];
+    const ODDS_API_KEY = '3d816b4ba29b2f7988c9d7927888ce84';
+    const SPORT_KEYS = {
+      'NFL': 'americanfootball_nfl',
+      'NBA': 'basketball_nba',
+      'MLB': 'baseball_mlb',
+      'NHL': 'icehockey_nhl',
+      'Soccer': 'soccer_epl',
+      'Golf': 'golf_masters_tournament_winner'
+    };
+
+    let GAMES = [];
+    let gamesLoaded = false;
+
+    function decimalToAmerican(dec) {
+      if (!dec) return null;
+      if (dec >= 2) return '+' + Math.round((dec - 1) * 100);
+      return Math.round(-100 / (dec - 1)).toString();
+    }
+
+    async function fetchOdds() {
+      if (gamesLoaded) return;
+      document.getElementById('games-list').innerHTML = '<div class="bl-loading">Loading live odds...</div>';
+      GAMES = [];
+      const sports = ['americanfootball_nfl','basketball_nba','baseball_mlb','icehockey_nhl','soccer_epl'];
+      const sportNameMap = {
+        'americanfootball_nfl': 'NFL',
+        'basketball_nba': 'NBA',
+        'baseball_mlb': 'MLB',
+        'icehockey_nhl': 'NHL',
+        'soccer_epl': 'Soccer'
+      };
+      for (const sportKey of sports) {
+        try {
+          const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&oddsFormat=decimal&dateFormat=iso`);
+          if (!res.ok) continue;
+          const data = await res.json();
+          data.slice(0, 4).forEach(game => {
+            const bk = game.bookmakers?.[0];
+            if (!bk) return;
+            const h2h = bk.markets?.find(m => m.key === 'h2h');
+            const spread = bk.markets?.find(m => m.key === 'spreads');
+            const total = bk.markets?.find(m => m.key === 'totals');
+            const homeTeam = game.home_team;
+            const awayTeam = game.away_team;
+            const homeH2H = h2h?.outcomes?.find(o => o.name === homeTeam);
+            const awayH2H = h2h?.outcomes?.find(o => o.name === awayTeam);
+            const homeSpread = spread?.outcomes?.find(o => o.name === homeTeam);
+            const awaySpread = spread?.outcomes?.find(o => o.name === awayTeam);
+            const over = total?.outcomes?.find(o => o.name === 'Over');
+            const under = total?.outcomes?.find(o => o.name === 'Under');
+            const gameTime = new Date(game.commence_time);
+            const timeStr = gameTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+            GAMES.push({
+              id: game.id,
+              sport: sportNameMap[sportKey],
+              home: homeTeam,
+              away: awayTeam,
+              homeRec: '',
+              awayRec: '',
+              time: timeStr,
+              spread: {
+                home: homeSpread ? (homeSpread.point > 0 ? '+' : '') + homeSpread.point : 'N/A',
+                away: awaySpread ? (awaySpread.point > 0 ? '+' : '') + awaySpread.point : 'N/A',
+                homeOdds: homeSpread ? decimalToAmerican(homeSpread.price) : 'N/A',
+                awayOdds: awaySpread ? decimalToAmerican(awaySpread.price) : 'N/A'
+              },
+              ml: {
+                home: homeH2H ? decimalToAmerican(homeH2H.price) : 'N/A',
+                away: awayH2H ? decimalToAmerican(awayH2H.price) : 'N/A'
+              },
+              ou: {
+                total: over?.point || 'N/A',
+                over: over ? decimalToAmerican(over.price) : 'N/A',
+                under: under ? decimalToAmerican(under.price) : 'N/A'
+              }
+            });
+          });
+        } catch(e) { console.log('Error fetching', sportKey, e); }
+      }
+      gamesLoaded = true;
+      renderGames();
+    }
 
     let leagueType = 'weekly';
 
@@ -581,7 +655,6 @@
         if (cached) document.getElementById('header-username').textContent = 'Hey, ' + cached;
         await loadProfile();
         await loadDashboard();
-        renderGames();
       } else {
         document.getElementById('auth-screen').style.display = 'flex';
         document.getElementById('app-screen').classList.remove('visible');
@@ -778,21 +851,25 @@
     function renderGames() {
       const list = document.getElementById('games-list');
       const filtered = currentSport === 'all' ? GAMES : GAMES.filter(g => g.sport === currentSport);
+      if (!filtered.length) {
+        list.innerHTML = '<div class="bl-empty">No upcoming games right now. Check back soon!</div>';
+        return;
+      }
       list.innerHTML = filtered.map(g => `
         <div class="bl-game-card">
           <div class="bl-game-header"><div class="bl-game-league">${g.sport}</div><div class="bl-game-time">${g.time}</div></div>
           <div class="bl-game-body">
             <div class="bl-matchup">
-              <div class="bl-team"><div class="bl-team-name">${g.away}</div><div class="bl-team-record">${g.awayRec}</div></div>
+              <div class="bl-team"><div class="bl-team-name">${g.away}</div></div>
               <div class="bl-vs">@</div>
-              <div class="bl-team" style="text-align:right;"><div class="bl-team-name">${g.home}</div><div class="bl-team-record">${g.homeRec}</div></div>
+              <div class="bl-team" style="text-align:right;"><div class="bl-team-name">${g.home}</div></div>
             </div>
             <div class="bl-bet-options">
-              <div class="bl-bet-btn" id="btn-${g.id}-sa" onclick="toggleBet('${g.id}','sa','${g.away} ${g.spread.away}','${g.spread.odds}','${g.sport}')"><div class="bl-bet-type">Spread</div><div class="bl-bet-line">${g.away} ${g.spread.away}</div><div class="bl-bet-odds">${g.spread.odds}</div></div>
-              <div class="bl-bet-btn" id="btn-${g.id}-ma" onclick="toggleBet('${g.id}','ma','${g.away} ML','${g.ml.away}','${g.sport}')"><div class="bl-bet-type">Moneyline</div><div class="bl-bet-line">${g.away}</div><div class="bl-bet-odds">${g.ml.away}</div></div>
+              <div class="bl-bet-btn" id="btn-${g.id}-sa" onclick="toggleBet('${g.id}','sa','${g.away} ${g.spread.away}','${g.spread.awayOdds}','${g.sport}')"><div class="bl-bet-type">Spread</div><div class="bl-bet-line">${g.away.split(' ').pop()} ${g.spread.away}</div><div class="bl-bet-odds">${g.spread.awayOdds}</div></div>
+              <div class="bl-bet-btn" id="btn-${g.id}-ma" onclick="toggleBet('${g.id}','ma','${g.away} ML','${g.ml.away}','${g.sport}')"><div class="bl-bet-type">Moneyline</div><div class="bl-bet-line">${g.away.split(' ').pop()}</div><div class="bl-bet-odds">${g.ml.away}</div></div>
               <div class="bl-bet-btn" id="btn-${g.id}-ov" onclick="toggleBet('${g.id}','ov','Over ${g.ou.total}','${g.ou.over}','${g.sport}')"><div class="bl-bet-type">Over/Under</div><div class="bl-bet-line">O ${g.ou.total}</div><div class="bl-bet-odds">${g.ou.over}</div></div>
-              <div class="bl-bet-btn" id="btn-${g.id}-sh" onclick="toggleBet('${g.id}','sh','${g.home} ${g.spread.home}','${g.spread.odds}','${g.sport}')"><div class="bl-bet-type">Spread</div><div class="bl-bet-line">${g.home} ${g.spread.home}</div><div class="bl-bet-odds">${g.spread.odds}</div></div>
-              <div class="bl-bet-btn" id="btn-${g.id}-mh" onclick="toggleBet('${g.id}','mh','${g.home} ML','${g.ml.home}','${g.sport}')"><div class="bl-bet-type">Moneyline</div><div class="bl-bet-line">${g.home}</div><div class="bl-bet-odds">${g.ml.home}</div></div>
+              <div class="bl-bet-btn" id="btn-${g.id}-sh" onclick="toggleBet('${g.id}','sh','${g.home} ${g.spread.home}','${g.spread.homeOdds}','${g.sport}')"><div class="bl-bet-type">Spread</div><div class="bl-bet-line">${g.home.split(' ').pop()} ${g.spread.home}</div><div class="bl-bet-odds">${g.spread.homeOdds}</div></div>
+              <div class="bl-bet-btn" id="btn-${g.id}-mh" onclick="toggleBet('${g.id}','mh','${g.home} ML','${g.ml.home}','${g.sport}')"><div class="bl-bet-type">Moneyline</div><div class="bl-bet-line">${g.home.split(' ').pop()}</div><div class="bl-bet-odds">${g.ml.home}</div></div>
               <div class="bl-bet-btn" id="btn-${g.id}-un" onclick="toggleBet('${g.id}','un','Under ${g.ou.total}','${g.ou.under}','${g.sport}')"><div class="bl-bet-type">Over/Under</div><div class="bl-bet-line">U ${g.ou.total}</div><div class="bl-bet-odds">${g.ou.under}</div></div>
             </div>
           </div>
@@ -891,6 +968,7 @@
       document.querySelectorAll('.bl-nav-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('panel-' + tab).classList.add('active');
       btn.classList.add('active');
+      if (tab === 'bet') fetchOdds();
     }
 
     function showToast(msg, isError) {
