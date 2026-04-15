@@ -510,7 +510,6 @@
     }
 
     async function fetchOdds() {
-      if (gamesLoaded) return;
       document.getElementById('games-list').innerHTML = '<div class="bl-loading">Loading live odds...</div>';
       GAMES = [];
       const sports = ['americanfootball_nfl','basketball_nba','baseball_mlb','icehockey_nhl','soccer_epl'];
@@ -526,12 +525,20 @@
           const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&oddsFormat=decimal&dateFormat=iso`);
           if (!res.ok) continue;
           const data = await res.json();
-          data.slice(0, 4).forEach(game => {
-            const bk = game.bookmakers?.[0];
-            if (!bk) return;
-            const h2h = bk.markets?.find(m => m.key === 'h2h');
-            const spread = bk.markets?.find(m => m.key === 'spreads');
-            const total = bk.markets?.find(m => m.key === 'totals');
+          const now = new Date();
+          data.filter(game => new Date(game.commence_time) > now).slice(0, 6).forEach(game => {
+            // Find best bookmaker that has all three markets
+            const getMarket = (key) => {
+              for (const b of game.bookmakers || []) {
+                const m = b.markets?.find(m => m.key === key);
+                if (m) return m;
+              }
+              return null;
+            };
+            const h2h = getMarket('h2h');
+            const spread = getMarket('spreads');
+            const total = getMarket('totals');
+            if (!h2h) return;
             const homeTeam = game.home_team;
             const awayTeam = game.away_team;
             const homeH2H = h2h?.outcomes?.find(o => o.name === homeTeam);
@@ -569,7 +576,6 @@
           });
         } catch(e) { console.log('Error fetching', sportKey, e); }
       }
-      gamesLoaded = true;
       renderGames();
     }
 
