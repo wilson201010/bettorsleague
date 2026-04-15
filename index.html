@@ -526,7 +526,7 @@
           if (!res.ok) continue;
           const data = await res.json();
           const now = new Date();
-          data.filter(game => new Date(game.commence_time) > now).slice(0, 6).forEach(game => {
+          data.filter(game => new Date(game.commence_time) > new Date(now - 3*60*60*1000)).slice(0, 20).forEach(game => {
             // Find best bookmaker that has all three markets
             const getMarket = (key) => {
               for (const b of game.bookmakers || []) {
@@ -548,10 +548,27 @@
             const over = total?.outcomes?.find(o => o.name === 'Over');
             const under = total?.outcomes?.find(o => o.name === 'Under');
             const gameTime = new Date(game.commence_time);
-            const timeStr = gameTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+            const now2 = new Date();
+            const diffMins = (gameTime - now2) / 60000;
+            const today = now2.toDateString();
+            const tomorrow = new Date(now2.getTime() + 86400000).toDateString();
+            let timeStr;
+            if (diffMins < -30) {
+              timeStr = 'LIVE';
+            } else if (diffMins < 0) {
+              timeStr = 'Starting Now';
+            } else if (gameTime.toDateString() === today) {
+              timeStr = 'Today ' + gameTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+            } else if (gameTime.toDateString() === tomorrow) {
+              timeStr = 'Tomorrow ' + gameTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+            } else {
+              timeStr = gameTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + gameTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+            }
+            const isLive = diffMins < 0;
             GAMES.push({
               id: game.id,
               sport: sportNameMap[sportKey],
+              isLive,
               home: homeTeam,
               away: awayTeam,
               homeRec: '',
@@ -858,12 +875,22 @@
       const list = document.getElementById('games-list');
       const filtered = currentSport === 'all' ? GAMES : GAMES.filter(g => g.sport === currentSport);
       if (!filtered.length) {
-        list.innerHTML = '<div class="bl-empty">No upcoming games right now. Check back soon!</div>';
+        list.innerHTML = '<div class="bl-empty">No games found. Check back soon!</div>';
         return;
       }
-      list.innerHTML = filtered.map(g => `
+
+      const live = filtered.filter(g => g.isLive);
+      const upcoming = filtered.filter(g => !g.isLive);
+
+      const renderGame = (g) => `
         <div class="bl-game-card">
-          <div class="bl-game-header"><div class="bl-game-league">${g.sport}</div><div class="bl-game-time">${g.time}</div></div>
+          <div class="bl-game-header" style="${g.isLive ? 'border-left:3px solid var(--bl-green);' : ''}">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="bl-game-league">${g.sport}</div>
+              ${g.isLive ? '<div style="background:var(--bl-green);color:#fff;font-size:9px;font-weight:600;padding:2px 7px;border-radius:10px;letter-spacing:1px;">LIVE</div>' : ''}
+            </div>
+            <div class="bl-game-time" style="${g.isLive ? 'color:var(--bl-green);' : ''}">${g.time}</div>
+          </div>
           <div class="bl-game-body">
             <div class="bl-matchup">
               <div class="bl-team"><div class="bl-team-name">${g.away}</div></div>
@@ -880,8 +907,22 @@
             </div>
           </div>
         </div>
-      `).join('');
+      `;
+
+      let html = '';
+      if (live.length) {
+        html += `<div class="bl-section-title" style="color:var(--bl-green);border-color:rgba(46,204,113,0.3);">Live Now (${live.length})</div>`;
+        html += live.map(renderGame).join('');
+      }
+      if (upcoming.length) {
+        html += `<div class="bl-section-title" style="margin-top:${live.length ? '20px' : '0'};">Upcoming (${upcoming.length})</div>`;
+        html += upcoming.map(renderGame).join('');
+      }
+      list.innerHTML = html;
     }
+
+    // Auto-refresh odds every 5 minutes
+    setInterval(() => { if (document.getElementById('panel-bet').classList.contains('active')) fetchOdds(); }, 300000);
 
     function toggleBet(gameId, betKey, pick, odds, sport) {
       const existing = slipItems.findIndex(s => s.gameId === gameId && s.betKey === betKey);
