@@ -435,7 +435,7 @@ const SPORT_KEYS = {
   ]}],
   'MLB': [{ key: 'baseball_mlb', label: 'MLB', subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: '1st 5 Inn', markets: 'h2h,alternate_runline,alternate_totals' },
+    { label: '1st 5 Inn', markets: 'h2h,spreads,totals' },
     { label: 'Props', markets: 'batter_home_runs,batter_hits,pitcher_strikeouts', isProps: true },
     { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
@@ -755,7 +755,9 @@ async function fetchOdds() {
       const data = await res.json();
       const now = new Date();
       console.log('Games from API for', sportKey, ':', data.length);
+      const seenGames = new Set(allGames.map(g=>g.id));
       data.filter(g => sub?.liveOnly ? new Date(g.commence_time) <= now : new Date(g.commence_time) > new Date(now - 3*60*60*1000))
+        .filter(g => !seenGames.has(g.id))
         .slice(0,15)
         .forEach(game => {
           const getMarket = (key) => { for (const b of game.bookmakers||[]) { const m=b.markets?.find(m=>m.key===key); if(m) return m; } return null; };
