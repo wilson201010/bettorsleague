@@ -477,13 +477,13 @@ let allGames = [], leagueType = 'weekly';
 const SPORT_KEYS = {
   'NBA': [{ key: 'basketball_nba', label: 'NBA', subs: [
     { label: 'All',      markets: 'h2h,spreads,totals' },
-    { label: '1st Half', markets: 'h2h_h1,spreads_h1,totals_h1', halfLabels: { spread:'Spread H1', ou:'O/U H1' } },
+    { label: '1st Half', markets: 'h2h_h1,spreads_h1,totals_h1', isHalf: true, halfLabels: { spread:'Spread H1', ou:'O/U H1' } },
     { label: 'Props',    markets: 'player_points,player_rebounds,player_assists,player_threes', isProps: true },
     { label: 'Live',     markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'MLB': [{ key: 'baseball_mlb', label: 'MLB', subs: [
     { label: 'All',       markets: 'h2h,spreads,totals' },
-    { label: '1st 5 Inn', markets: 'h2h_1st5_innings,spreads_1st5_innings,totals_1st5_innings', halfLabels: { spread:'RL 1st5', ou:'O/U 1st5' } },
+    { label: '1st 5 Inn', markets: 'h2h_1st_5_innings,spreads_1st_5_innings,totals_1st_5_innings', isHalf: true, halfLabels: { spread:'RL 1st5', ou:'O/U 1st5' } },
     { label: 'Props',     markets: 'batter_home_runs,batter_hits,pitcher_strikeouts,batter_total_bases', isProps: true },
     { label: 'Live',      markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
@@ -504,7 +504,7 @@ const SPORT_KEYS = {
   ]}],
   'NCAAB': [{ key: 'basketball_ncaab', label: 'NCAAB', subs: [{ label: 'All', markets: 'h2h,spreads,totals' }] }],
   'MMA': [{ key: 'mma_mixed_martial_arts', label: 'MMA', subs: [{ label: 'All', markets: 'h2h' }] }],
-  'Golf': [{ key: 'golf_pga_championship', label: 'PGA', subs: [{ label: 'All', markets: 'h2h' }] }],
+  'Golf': [{ key: 'golf', label: 'Golf', subs: [{ label: 'To Win', markets: 'outrights' }] }],
 };
 
 const ALL_SPORT_KEYS = ['basketball_nba','baseball_mlb','icehockey_nhl','americanfootball_nfl','soccer_epl','soccer_usa_mls','basketball_ncaab','mma_mixed_martial_arts'];
@@ -737,10 +737,32 @@ async function fetchOdds() {
   document.getElementById('games-container').innerHTML = '<div class="loading">Loading live odds...</div>';
   allGames = [];
 
-  const sub = currentSubSport || {label:'All', markets:'h2h,spreads,totals'};
-  let keys, markets = sub.markets || 'h2h,spreads,totals';
+  const sub = currentSubSport || { label:'All', markets:'h2h,spreads,totals' };
 
-  if (currentSport==='all') {
+  // Golf: outrights, dynamic tournament list
+  if (currentSport === 'Golf') {
+    await fetchGolfOdds();
+    renderGames();
+    return;
+  }
+
+  // Props: per-event endpoint
+  if (sub?.isProps) {
+    await fetchPerEventOdds(sub.markets, true);
+    renderGames();
+    return;
+  }
+
+  // Half/innings: per-event endpoint (bulk endpoint doesn't support these extra markets)
+  if (sub?.isHalf) {
+    await fetchPerEventOdds(sub.markets, false);
+    renderGames();
+    return;
+  }
+
+  // Standard bulk path
+  let keys, markets = sub.markets || 'h2h,spreads,totals';
+  if (currentSport === 'all') {
     keys = ALL_SPORT_KEYS;
     markets = 'h2h,spreads,totals';
   } else {
@@ -749,172 +771,45 @@ async function fetchOdds() {
     keys = altKey ? [altKey] : (baseKey ? [baseKey] : ALL_SPORT_KEYS);
   }
 
-  // ── PROPS PATH ──
-  // FIX: props use the /events/{id}/odds endpoint with bookmakers=us, not the bulk endpoint
-  if (sub?.isProps) {
-    const baseKey = (SPORT_KEYS[currentSport]||[])[0]?.key;
-    try {
-      const evRes = await fetch(`https://api.the-odds-api.com/v4/sports/${baseKey}/events?apiKey=${ODDS_KEY}&dateFormat=iso`);
-      if (!evRes.ok) {
-        document.getElementById('games-container').innerHTML='<div class="empty">Props unavailable right now.</div>';
-        return;
-      }
-      const events = await evRes.json();
-      const now = new Date();
-      // Include games starting within 3 hrs in the past (live) or upcoming
-      const upcoming = events
-        .filter(e => new Date(e.commence_time) > new Date(now - 4*60*60*1000))
-        .slice(0, 6);
-
-      if (!upcoming.length) {
-        document.getElementById('games-container').innerHTML='<div class="empty">No upcoming games for props.</div>';
-        return;
-      }
-
-      for (const ev of upcoming) {
-        try {
-          // FIX: use bookmakers param (not regions) and request proper prop market keys
-          const propMarkets = sub.markets;
-          const pRes = await fetch(
-            `https://api.the-odds-api.com/v4/sports/${baseKey}/events/${ev.id}/odds?apiKey=${ODDS_KEY}&regions=us&markets=${propMarkets}&oddsFormat=decimal&dateFormat=iso`
-          );
-          if (!pRes.ok) continue;
-          const pData = await pRes.json();
-
-          const gt = new Date(ev.commence_time);
-          const diffMins = (gt - now) / 60000;
-          let timeStr;
-          if (diffMins < 0) timeStr = 'LIVE';
-          else if (gt.toDateString() === now.toDateString())
-            timeStr = 'Today ' + gt.toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',timeZoneName:'short'});
-          else
-            timeStr = gt.toLocaleDateString('en-US', {weekday:'short',month:'short',day:'numeric'});
-
-          // FIX: collect props from ALL bookmakers, dedup by player+market, prefer DraftKings
-          const allBkMkts = [];
-          const bkPriority = (pData.bookmakers||[]).find(b=>b.key==='draftkings')
-            || (pData.bookmakers||[])[0];
-          if (!bkPriority) continue;
-
-          const seen = new Set();
-          (bkPriority.markets || []).forEach(mkt => {
-            // Group outcomes by player description -> find Over/Under
-            const byPlayer = {};
-            (mkt.outcomes || []).forEach(o => {
-              const playerKey = o.description || o.name;
-              if (!byPlayer[playerKey]) byPlayer[playerKey] = {over: null, under: null, point: null};
-              const nameLower = (o.name||'').toLowerCase();
-              if (nameLower === 'over') {
-                byPlayer[playerKey].over = o;
-                byPlayer[playerKey].point = o.point;
-              } else if (nameLower === 'under') {
-                byPlayer[playerKey].under = o;
-                if (!byPlayer[playerKey].point) byPlayer[playerKey].point = o.point;
-              } else {
-                // Some markets (h2h style props) don't have over/under
-                byPlayer[playerKey].over = o;
-              }
-            });
-
-            Object.entries(byPlayer).forEach(([player, sides]) => {
-              const uid = ev.id + '_' + mkt.key + '_' + player;
-              if (seen.has(uid)) return;
-              seen.add(uid);
-
-              const overOdds = dec2am(sides.over?.price);
-              const underOdds = dec2am(sides.under?.price);
-              const line = sides.point !== null && sides.point !== undefined ? sides.point : '';
-
-              // Only push if we have at least one valid odds value
-              if (!overOdds && !underOdds) return;
-
-              allGames.push({
-                id: uid,
-                sport: SPORT_NAME_MAP[baseKey] || currentSport,
-                home: ev.home_team,
-                away: ev.away_team,
-                isLive: diffMins < 0,
-                time: timeStr,
-                isProp: true,
-                propPlayer: player,
-                propMarket: mkt.key.replace(/_/g,' ').replace(/\b\w/g, c=>c.toUpperCase()),
-                propLine: line,
-                propOverOdds: overOdds,
-                propUnderOdds: underOdds,
-                // unused but keep shape consistent
-                ml:{home:null,away:null},
-                spread:{home:'',away:'',homeOdds:null,awayOdds:null},
-                ou:{total:'',over:null,under:null}
-              });
-            });
-          });
-        } catch(e) { console.warn('Props fetch error for event', ev.id, e); }
-      }
-    } catch(e) { console.warn('Props events fetch error', e); }
-
-    renderGames();
-    return;
-  }
-
-  // ── STANDARD GAMES PATH ──
   for (const sportKey of keys) {
     try {
       const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=${markets}&oddsFormat=decimal&dateFormat=iso`);
       if (!res.ok) continue;
       const data = await res.json();
       const now = new Date();
-      const seenGames = new Set(allGames.map(g=>g.id));
-
+      const seenGames = new Set(allGames.map(g => g.id));
       data
         .filter(g => sub?.liveOnly ? new Date(g.commence_time) <= now : new Date(g.commence_time) > now)
         .filter(g => !seenGames.has(g.id))
         .slice(0, 15)
         .forEach(game => {
           const getMarket = (key) => {
-            for (const b of game.bookmakers||[]) {
-              const m = b.markets?.find(m=>m.key===key);
-              if (m) return m;
-            }
+            for (const b of game.bookmakers||[]) { const m = b.markets?.find(m => m.key===key); if (m) return m; }
             return null;
           };
-          // Support half/inning market keys: h2h_h1 → h2h_h1, spreads_h1 → spreads_h1, etc.
-          // The markets string tells us which keys were requested; pick the right ones
-          const marketList = markets.split(',');
-          const h2hKey    = marketList.find(m => m.startsWith('h2h'))    || 'h2h';
-          const spreadKey = marketList.find(m => m.startsWith('spread')) || 'spreads';
-          const totalKey  = marketList.find(m => m.startsWith('total'))  || 'totals';
-
-          const h2h    = getMarket(h2hKey);
-          const spread = getMarket(spreadKey);
-          const total  = getMarket(totalKey);
+          const h2h    = getMarket('h2h');
+          const spread = getMarket('spreads');
+          const total  = getMarket('totals');
           if (!h2h) return;
-
-          const homeH2H  = h2h.outcomes?.find(o=>o.name===game.home_team);
-          const awayH2H  = h2h.outcomes?.find(o=>o.name===game.away_team);
-          const homeSprd = spread?.outcomes?.find(o=>o.name===game.home_team);
-          const awaySprd = spread?.outcomes?.find(o=>o.name===game.away_team);
-          const over     = total?.outcomes?.find(o=>o.name==='Over');
-          const under    = total?.outcomes?.find(o=>o.name==='Under');
-
+          const homeH2H  = h2h.outcomes?.find(o => o.name===game.home_team);
+          const awayH2H  = h2h.outcomes?.find(o => o.name===game.away_team);
+          const homeSprd = spread?.outcomes?.find(o => o.name===game.home_team);
+          const awaySprd = spread?.outcomes?.find(o => o.name===game.away_team);
+          const over     = total?.outcomes?.find(o => o.name==='Over');
+          const under    = total?.outcomes?.find(o => o.name==='Under');
           const gt = new Date(game.commence_time);
           const diffMins = (gt-now)/60000;
-          const today = now.toDateString();
-          const tmrw  = new Date(now.getTime()+86400000).toDateString();
+          const today = now.toDateString(), tmrw = new Date(now.getTime()+86400000).toDateString();
           let timeStr;
-          if (diffMins < -30)               timeStr = 'LIVE';
-          else if (diffMins < 0)            timeStr = 'Starting Now';
+          if (diffMins < -30)                timeStr = 'LIVE';
+          else if (diffMins < 0)             timeStr = 'Starting Now';
           else if (gt.toDateString()===today) timeStr = 'Today '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
           else if (gt.toDateString()===tmrw)  timeStr = 'Tomorrow '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
           else timeStr = gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
-
           allGames.push({
-            id: game.id,
-            sport: SPORT_NAME_MAP[sportKey]||sportKey,
-            home: game.home_team,
-            away: game.away_team,
-            isLive: diffMins < 0,
-            time: timeStr,
-            isProp: false,
+            id: game.id, sport: SPORT_NAME_MAP[sportKey]||sportKey,
+            home: game.home_team, away: game.away_team,
+            isLive: diffMins < 0, time: timeStr, isProp: false,
             ml:     { home: dec2am(homeH2H?.price),  away: dec2am(awayH2H?.price) },
             spread: { home: homeSprd ? (homeSprd.point>0?'+':'')+homeSprd.point : 'N/A',
                       away: awaySprd ? (awaySprd.point>0?'+':'')+awaySprd.point : 'N/A',
@@ -926,6 +821,147 @@ async function fetchOdds() {
   }
   renderGames();
 }
+
+// ── GOLF: dynamically find active tournaments, fetch outrights ──
+async function fetchGolfOdds() {
+  try {
+    const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ODDS_KEY}`);
+    if (!sportsRes.ok) return;
+    const allSports = await sportsRes.json();
+    const now = new Date();
+    const golfSports = allSports.filter(s => s.group === 'Golf' && s.active);
+    if (!golfSports.length) {
+      document.getElementById('games-container').innerHTML = '<div class="empty">No active golf tournaments right now.</div>';
+      return;
+    }
+    for (const sport of golfSports.slice(0, 4)) {
+      try {
+        const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=outrights&oddsFormat=decimal&dateFormat=iso`);
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (!data.length) continue;
+        const event = data[0];
+        const gt = new Date(event.commence_time);
+        const diffMins = (gt - now) / 60000;
+        let timeStr;
+        if (diffMins < 0) timeStr = 'LIVE';
+        else if (gt.toDateString() === now.toDateString()) timeStr = 'Today';
+        else if (gt.toDateString() === new Date(now.getTime()+86400000).toDateString()) timeStr = 'Tomorrow';
+        else timeStr = gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+        const bk = (event.bookmakers||[]).find(b => b.key==='draftkings') || (event.bookmakers||[])[0];
+        if (!bk) continue;
+        const mkt = bk.markets?.find(m => m.key === 'outrights');
+        if (!mkt) continue;
+        const sorted = [...(mkt.outcomes||[])].sort((a,b) => a.price - b.price);
+        sorted.forEach((player, idx) => {
+          const amOdds = dec2am(player.price);
+          if (!amOdds) return;
+          allGames.push({
+            id: event.id+'_'+idx, sport: sport.title||'Golf',
+            home: player.name, away: '',
+            isLive: diffMins < 0, time: timeStr,
+            isGolf: true, tournamentTitle: sport.title||'Golf', playerName: player.name, winOdds: amOdds,
+            isProp: false,
+            ml: { home: amOdds, away: null },
+            spread: { home:'', away:'', homeOdds:null, awayOdds:null },
+            ou: { total:'', over:null, under:null }
+          });
+        });
+      } catch(e) { console.warn('Golf fetch error', sport.key, e); }
+    }
+  } catch(e) { console.warn('Golf sports list error', e); }
+}
+
+// ── PER-EVENT FETCH: props and half/innings markets ──
+async function fetchPerEventOdds(markets, isProps) {
+  const baseKey = (SPORT_KEYS[currentSport]||[])[0]?.key;
+  if (!baseKey) return;
+  try {
+    const evRes = await fetch(`https://api.the-odds-api.com/v4/sports/${baseKey}/events?apiKey=${ODDS_KEY}&dateFormat=iso`);
+    if (!evRes.ok) return;
+    const events = await evRes.json();
+    const now = new Date();
+    const upcoming = events
+      .filter(e => new Date(e.commence_time) > new Date(now - 4*60*60*1000))
+      .slice(0, isProps ? 6 : 15);
+    if (!upcoming.length) return;
+
+    for (const ev of upcoming) {
+      try {
+        const pRes = await fetch(`https://api.the-odds-api.com/v4/sports/${baseKey}/events/${ev.id}/odds?apiKey=${ODDS_KEY}&regions=us&markets=${markets}&oddsFormat=decimal&dateFormat=iso`);
+        if (!pRes.ok) continue;
+        const pData = await pRes.json();
+        const gt = new Date(ev.commence_time);
+        const diffMins = (gt - now) / 60000;
+        const today = now.toDateString(), tmrw = new Date(now.getTime()+86400000).toDateString();
+        let timeStr;
+        if (diffMins < 0)                  timeStr = 'LIVE';
+        else if (gt.toDateString()===today) timeStr = 'Today '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+        else if (gt.toDateString()===tmrw)  timeStr = 'Tomorrow '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+        else timeStr = gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+        const bk = (pData.bookmakers||[]).find(b => b.key==='draftkings') || (pData.bookmakers||[])[0];
+        if (!bk) continue;
+
+        if (isProps) {
+          const seen = new Set();
+          (bk.markets||[]).forEach(mkt => {
+            const byPlayer = {};
+            (mkt.outcomes||[]).forEach(o => {
+              const pk = o.description || o.name;
+              if (!byPlayer[pk]) byPlayer[pk] = { over:null, under:null, point:null };
+              const nl = (o.name||'').toLowerCase();
+              if (nl==='over') { byPlayer[pk].over=o; byPlayer[pk].point=o.point; }
+              else if (nl==='under') { byPlayer[pk].under=o; if (!byPlayer[pk].point) byPlayer[pk].point=o.point; }
+              else { byPlayer[pk].over=o; }
+            });
+            Object.entries(byPlayer).forEach(([player, sides]) => {
+              const uid = ev.id+'_'+mkt.key+'_'+player;
+              if (seen.has(uid)) return; seen.add(uid);
+              const overOdds = dec2am(sides.over?.price), underOdds = dec2am(sides.under?.price);
+              const line = sides.point != null ? sides.point : '';
+              if (!overOdds && !underOdds) return;
+              allGames.push({
+                id: uid, sport: SPORT_NAME_MAP[baseKey]||currentSport,
+                home: ev.home_team, away: ev.away_team,
+                isLive: diffMins<0, time: timeStr, isProp: true,
+                propPlayer: player,
+                propMarket: mkt.key.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),
+                propLine: line, propOverOdds: overOdds, propUnderOdds: underOdds,
+                ml:{home:null,away:null}, spread:{home:'',away:'',homeOdds:null,awayOdds:null}, ou:{total:'',over:null,under:null}
+              });
+            });
+          });
+        } else {
+          // Half / innings lines
+          const mktList = markets.split(',');
+          const h2hKey    = mktList.find(m => m.startsWith('h2h'))    || 'h2h';
+          const spreadKey = mktList.find(m => m.startsWith('spread')) || 'spreads';
+          const totalKey  = mktList.find(m => m.startsWith('total'))  || 'totals';
+          const getM = k => (bk.markets||[]).find(m => m.key===k);
+          const h2h = getM(h2hKey), spread = getM(spreadKey), total = getM(totalKey);
+          if (!h2h) continue;
+          const homeH2H  = h2h.outcomes?.find(o => o.name===ev.home_team);
+          const awayH2H  = h2h.outcomes?.find(o => o.name===ev.away_team);
+          const homeSprd = spread?.outcomes?.find(o => o.name===ev.home_team);
+          const awaySprd = spread?.outcomes?.find(o => o.name===ev.away_team);
+          const over     = total?.outcomes?.find(o => o.name==='Over');
+          const under    = total?.outcomes?.find(o => o.name==='Under');
+          allGames.push({
+            id: ev.id, sport: SPORT_NAME_MAP[baseKey]||currentSport,
+            home: ev.home_team, away: ev.away_team,
+            isLive: diffMins<0, time: timeStr, isProp: false,
+            ml:     { home: dec2am(homeH2H?.price),  away: dec2am(awayH2H?.price) },
+            spread: { home: homeSprd ? (homeSprd.point>0?'+':'')+homeSprd.point : 'N/A',
+                      away: awaySprd ? (awaySprd.point>0?'+':'')+awaySprd.point : 'N/A',
+                      homeOdds: dec2am(homeSprd?.price), awayOdds: dec2am(awaySprd?.price) },
+            ou:     { total: over?.point||'N/A', over: dec2am(over?.price), under: dec2am(under?.price) }
+          });
+        }
+      } catch(e) { console.warn('Per-event fetch error', ev.id, e); }
+    }
+  } catch(e) { console.warn('Per-event events list error', e); }
+}
+
 
 function renderSubSports() {
   const el = document.getElementById('sub-sport-tabs');
@@ -979,12 +1015,56 @@ function renderGames() {
   }
 
   // Separate props from regular games
-  const props    = allGames.filter(g => g.isProp);
-  const regular  = allGames.filter(g => !g.isProp);
+  const golf    = allGames.filter(g => g.isGolf);
+  const props   = allGames.filter(g => g.isProp);
+  const regular = allGames.filter(g => !g.isProp && !g.isGolf);
   const live     = regular.filter(g => g.isLive);
   const upcoming = regular.filter(g => !g.isLive);
 
   let html = '';
+
+  // ── Render golf outrights ──
+  if (golf.length) {
+    // Group by tournament
+    const byTourney = {};
+    golf.forEach(g => {
+      if (!byTourney[g.tournamentTitle]) byTourney[g.tournamentTitle] = { isLive: g.isLive, time: g.time, rows: [] };
+      byTourney[g.tournamentTitle].rows.push(g);
+    });
+    Object.entries(byTourney).forEach(([title, t]) => {
+      html += `
+        <div class="game-group">
+          <div class="game-group-header">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="game-group-title">⛳ ${escHtml(title)}</span>
+              ${t.isLive ? '<span class="live-badge">LIVE</span>' : ''}
+            </div>
+            <span class="game-group-time" style="${t.isLive?'color:var(--green);':''}">${t.time}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:3px 14px;background:var(--surface2);">
+            <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;flex:1;">Player</span>
+            <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;width:80px;text-align:center;">To Win</span>
+          </div>
+      `;
+      t.rows.forEach(g => {
+        const sel = isSelected(g.id, 'gw') ? ' selected' : '';
+        html += `
+          <div class="prop-row" style="cursor:pointer;" onclick="toggleBet('${g.id}','gw','${escAttr(g.playerName)} (To Win ${escAttr(g.tournamentTitle)})','${g.winOdds}','Golf')">
+            <div class="prop-player" style="flex:1;">
+              <div class="prop-name">${escHtml(g.playerName)}</div>
+            </div>
+            <div style="width:80px;text-align:center;">
+              <div class="prop-cell${sel}" style="display:inline-block;min-width:70px;">
+                <span class="prop-cell-odds">${g.winOdds}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      html += `</div>`;
+    });
+    return void (el.innerHTML = html);
+  }
 
   // ── Render props ──
   if (props.length) {
