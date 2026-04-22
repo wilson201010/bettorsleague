@@ -419,7 +419,7 @@
 <script>
 const SUPABASE_URL = 'https://fexbrsplfongvardrarb.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZleGJyc3BsZm9uZ3ZhcmRyYXJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxODUzNzgsImV4cCI6MjA5MTc2MTM3OH0.K9umByuKZn4BxgKSyfoZI_Q2CeS2I1b3WmdNuQco9QA';
-const ODDS_KEY = '3d816b4ba29b2f7988c9d7927888ce84';
+const ODDS_KEY = 'c1869a9a987db1c5e02ff83a6251831d';
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -674,6 +674,7 @@ async function joinLeague() {
 // ── ODDS + GAMES ──
 async function fetchOdds() {
   document.getElementById('games-container').innerHTML = '<div class="loading">Loading live odds...</div>';
+  console.log('fetchOdds called - sport:', currentSport, 'sub:', currentSubSport, 'keys:', keys, 'markets:', markets);
   allGames = [];
   const sub = (typeof currentSubSport === 'object') ? currentSubSport : {label:'All', markets:'h2h,spreads,totals'};
   let keys, markets = sub.markets || 'h2h,spreads,totals';
@@ -749,9 +750,11 @@ async function fetchOdds() {
   for (const sportKey of keys) {
     try {
       const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=${markets}&oddsFormat=decimal&dateFormat=iso`);
-      if (!res.ok) continue;
+      console.log('API response status:', res.status, 'for', sportKey);
+      if (!res.ok) { console.log('API error body:', await res.text()); continue; }
       const data = await res.json();
       const now = new Date();
+      console.log('Games from API for', sportKey, ':', data.length);
       data.filter(g => sub?.liveOnly ? new Date(g.commence_time) <= now : new Date(g.commence_time) > new Date(now - 3*60*60*1000))
         .slice(0,15)
         .forEach(game => {
@@ -784,6 +787,7 @@ async function fetchOdds() {
         });
     } catch(e) { console.log('Fetch error',sportKey,e); }
   }
+  console.log('Total games loaded:', allGames.length);
   renderGames();
 }
 
