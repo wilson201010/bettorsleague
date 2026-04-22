@@ -476,16 +476,16 @@ let allGames = [], leagueType = 'weekly';
 
 const SPORT_KEYS = {
   'NBA': [{ key: 'basketball_nba', label: 'NBA', subs: [
-    { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: '1st Half', markets: 'h2h,spreads,totals' },
-    { label: 'Props', markets: 'player_points,player_rebounds,player_assists,player_threes', isProps: true },
-    { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
+    { label: 'All',      markets: 'h2h,spreads,totals' },
+    { label: '1st Half', markets: 'h2h_h1,spreads_h1,totals_h1', halfLabels: { spread:'Spread H1', ou:'O/U H1' } },
+    { label: 'Props',    markets: 'player_points,player_rebounds,player_assists,player_threes', isProps: true },
+    { label: 'Live',     markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'MLB': [{ key: 'baseball_mlb', label: 'MLB', subs: [
-    { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: '1st 5 Inn', markets: 'h2h,spreads,totals' },
-    { label: 'Props', markets: 'batter_home_runs,batter_hits,pitcher_strikeouts,batter_total_bases', isProps: true },
-    { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
+    { label: 'All',       markets: 'h2h,spreads,totals' },
+    { label: '1st 5 Inn', markets: 'h2h_1st5_innings,spreads_1st5_innings,totals_1st5_innings', halfLabels: { spread:'RL 1st5', ou:'O/U 1st5' } },
+    { label: 'Props',     markets: 'batter_home_runs,batter_hits,pitcher_strikeouts,batter_total_bases', isProps: true },
+    { label: 'Live',      markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'NHL': [{ key: 'icehockey_nhl', label: 'NHL', subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
@@ -877,9 +877,16 @@ async function fetchOdds() {
             }
             return null;
           };
-          const h2h    = getMarket('h2h');
-          const spread = getMarket('spreads') || getMarket('alternate_runline');
-          const total  = getMarket('totals') || getMarket('alternate_totals');
+          // Support half/inning market keys: h2h_h1 → h2h_h1, spreads_h1 → spreads_h1, etc.
+          // The markets string tells us which keys were requested; pick the right ones
+          const marketList = markets.split(',');
+          const h2hKey    = marketList.find(m => m.startsWith('h2h'))    || 'h2h';
+          const spreadKey = marketList.find(m => m.startsWith('spread')) || 'spreads';
+          const totalKey  = marketList.find(m => m.startsWith('total'))  || 'totals';
+
+          const h2h    = getMarket(h2hKey);
+          const spread = getMarket(spreadKey);
+          const total  = getMarket(totalKey);
           if (!h2h) return;
 
           const homeH2H  = h2h.outcomes?.find(o=>o.name===game.home_team);
@@ -1045,6 +1052,10 @@ function renderGames() {
   }
 
   // ── Render regular games ──
+  const sub = currentSubSport || {};
+  const spreadLabel = sub.halfLabels?.spread || 'Spread';
+  const ouLabel     = sub.halfLabels?.ou     || 'O/U';
+
   const renderGroup = (games, isLive) => {
     if (!games.length) return '';
     let h = `<div class="game-group">`;
@@ -1059,25 +1070,25 @@ function renderGames() {
             <span class="game-group-time" style="${g.isLive?'color:var(--green);':''}">${g.time}</span>
           </div>
           <div class="odds-header">
-            <div class="odds-header-cell">Spread</div>
+            <div class="odds-header-cell">${spreadLabel}</div>
             <div class="odds-header-cell">ML</div>
-            <div class="odds-header-cell">O/U</div>
+            <div class="odds-header-cell">${ouLabel}</div>
           </div>
           <div class="game-teams">
             <div class="team-row">
               <div class="team-name">${escHtml(g.away)}</div>
               <div class="odds-cells">
-                ${oddsCell(g,'sa', g.spread.away,  g.spread.awayOdds, `${g.away} ${g.spread.away}`)}
-                ${oddsCell(g,'ma', 'ML',           g.ml.away,         `${g.away} ML`)}
-                ${oddsCell(g,'ov', 'O '+g.ou.total, g.ou.over,        `Over ${g.ou.total}`)}
+                ${oddsCell(g,'sa', g.spread.away,   g.spread.awayOdds, `${g.away} ${g.spread.away}${sub.halfLabels?' ('+sub.label+')':''}`)}
+                ${oddsCell(g,'ma', 'ML',             g.ml.away,         `${g.away} ML${sub.halfLabels?' ('+sub.label+')':''}`)}
+                ${oddsCell(g,'ov', 'O '+g.ou.total,  g.ou.over,         `Over ${g.ou.total}${sub.halfLabels?' ('+sub.label+')':''}`)}
               </div>
             </div>
             <div class="team-row">
               <div class="team-name">${escHtml(g.home)}</div>
               <div class="odds-cells">
-                ${oddsCell(g,'sh', g.spread.home,  g.spread.homeOdds, `${g.home} ${g.spread.home}`)}
-                ${oddsCell(g,'mh', 'ML',           g.ml.home,         `${g.home} ML`)}
-                ${oddsCell(g,'un', 'U '+g.ou.total, g.ou.under,       `Under ${g.ou.total}`)}
+                ${oddsCell(g,'sh', g.spread.home,   g.spread.homeOdds, `${g.home} ${g.spread.home}${sub.halfLabels?' ('+sub.label+')':''}`)}
+                ${oddsCell(g,'mh', 'ML',             g.ml.home,         `${g.home} ML${sub.halfLabels?' ('+sub.label+')':''}`)}
+                ${oddsCell(g,'un', 'U '+g.ou.total,  g.ou.under,        `Under ${g.ou.total}${sub.halfLabels?' ('+sub.label+')':''}`)}
               </div>
             </div>
           </div>
