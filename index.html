@@ -328,14 +328,16 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
       </div>
       <div class="sport-scroll" id="sport-tabs">
         <button class="sport-pill active" onclick="setSport('all',this)">All</button>
-        <button class="sport-pill" onclick="setSport('NBA',this)">🏀 NBA</button>
-        <button class="sport-pill" onclick="setSport('MLB',this)">⚾ MLB</button>
-        <button class="sport-pill" onclick="setSport('NHL',this)">🏒 NHL</button>
-        <button class="sport-pill" onclick="setSport('NFL',this)">🏈 NFL</button>
-        <button class="sport-pill" onclick="setSport('Soccer',this)">⚽ Soccer</button>
-        <button class="sport-pill" onclick="setSport('NCAAB',this)">🎓 NCAAB</button>
-        <button class="sport-pill" onclick="setSport('MMA',this)">🥊 MMA</button>
-        <button class="sport-pill" onclick="setSport('Golf',this)">⛳ Golf</button>
+        <button class="sport-pill" data-sport="NBA" onclick="setSport('NBA',this)">🏀 NBA</button>
+        <button class="sport-pill" data-sport="MLB" onclick="setSport('MLB',this)">⚾ MLB</button>
+        <button class="sport-pill" data-sport="NHL" onclick="setSport('NHL',this)">🏒 NHL</button>
+        <button class="sport-pill" data-sport="NFL" onclick="setSport('NFL',this)">🏈 NFL</button>
+        <button class="sport-pill" data-sport="Soccer" onclick="setSport('Soccer',this)">⚽ Soccer</button>
+        <button class="sport-pill" data-sport="NCAAB" onclick="setSport('NCAAB',this)">🎓 NCAAB</button>
+        <button class="sport-pill" data-sport="NCAAF" onclick="setSport('NCAAF',this)">🏈 NCAAF</button>
+        <button class="sport-pill" data-sport="MMA" onclick="setSport('MMA',this)">🥊 MMA</button>
+        <button class="sport-pill" data-sport="Golf" onclick="setSport('Golf',this)">⛳ Golf</button>
+        <button class="sport-pill" data-sport="Tennis" onclick="setSport('Tennis',this)">🎾 Tennis</button>
       </div>
       <div class="sub-sport-scroll" id="sub-sport-tabs"></div>
       <div id="games-container"><div class="loading">Loading live odds...</div></div>
@@ -428,6 +430,9 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
         <label class="sport-chk"><input type="checkbox" value="Soccer" checked /> Soccer</label>
         <label class="sport-chk"><input type="checkbox" value="Golf" /> Golf</label>
         <label class="sport-chk"><input type="checkbox" value="MMA" /> MMA</label>
+        <label class="sport-chk"><input type="checkbox" value="Tennis" /> Tennis</label>
+        <label class="sport-chk"><input type="checkbox" value="NCAAB" /> NCAAB</label>
+        <label class="sport-chk"><input type="checkbox" value="NCAAF" /> NCAAF</label>
       </div>
     </div>
     <div class="form-row">
@@ -475,46 +480,70 @@ let slipItems = [], betType = 'straight', currentSport = 'all', currentSubSport 
 let allGames = [], leagueType = 'weekly';
 
 const SPORT_KEYS = {
-  'NBA': [{ key: 'basketball_nba', label: 'NBA', subs: [
+  'NBA': [{ key: 'basketball_nba', label: 'NBA', inSeason: true, subs: [
     { label: 'All',      markets: 'h2h,spreads,totals' },
     { label: '1st Half', markets: 'h2h_h1,spreads_h1,totals_h1', isHalf: true, halfLabels: { spread:'Spread H1', ou:'O/U H1' } },
-    { label: 'Props',    markets: 'player_points,player_rebounds,player_assists,player_threes', isProps: true },
+    { label: 'Props',    markets: 'player_points,player_rebounds,player_assists,player_threes,player_steals,player_blocks,player_turnovers,player_points_rebounds_assists', isProps: true },
     { label: 'Live',     markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
-  'MLB': [{ key: 'baseball_mlb', label: 'MLB', subs: [
+  'MLB': [{ key: 'baseball_mlb', label: 'MLB', inSeason: true, subs: [
     { label: 'All',       markets: 'h2h,spreads,totals' },
     { label: '1st 5 Inn', markets: 'h2h_1st_5_innings,spreads_1st_5_innings,totals_1st_5_innings', isHalf: true, halfLabels: { spread:'RL 1st5', ou:'O/U 1st5' } },
-    { label: 'Props',     markets: 'batter_home_runs,batter_hits,pitcher_strikeouts,batter_total_bases', isProps: true },
+    { label: 'Props',     markets: 'batter_home_runs,batter_hits,pitcher_strikeouts,batter_total_bases,batter_rbis,pitcher_hits_allowed,pitcher_walks,batter_stolen_bases', isProps: true },
     { label: 'Live',      markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
-  'NHL': [{ key: 'icehockey_nhl', label: 'NHL', subs: [
+  'NHL': [{ key: 'icehockey_nhl', label: 'NHL', inSeason: true, subs: [
+    { label: 'All',   markets: 'h2h,spreads,totals' },
+    { label: 'Props', markets: 'player_points,player_goals,player_assists,player_shots_on_goal,player_power_play_points', isProps: true },
+    { label: 'Live',  markets: 'h2h,spreads,totals', liveOnly: true },
+  ]}],
+  'NFL': [{ key: 'americanfootball_nfl', label: 'NFL', inSeason: false, subs: [
+    { label: 'All',     markets: 'h2h,spreads,totals' },
+    { label: 'Props',   markets: 'player_pass_tds,player_rush_yds,player_receptions,player_pass_yds,player_reception_yds,player_anytime_td,player_1st_td', isProps: true },
+    { label: 'Futures', markets: 'outrights', altKey: 'americanfootball_nfl_super_bowl_winner', isGolfStyle: true },
+  ]}],
+  'Soccer': [{ key: 'soccer_epl', label: 'EPL', inSeason: true, subs: [
+    { label: 'EPL',  markets: 'h2h,spreads,totals' },
+    { label: 'MLS',  markets: 'h2h,spreads,totals', altKey: 'soccer_usa_mls' },
+    { label: 'UCL',  markets: 'h2h,spreads,totals', altKey: 'soccer_uefa_champs_league' },
+    { label: 'Liga', markets: 'h2h,spreads,totals', altKey: 'soccer_spain_la_liga' },
+    { label: 'Bund', markets: 'h2h,spreads,totals', altKey: 'soccer_germany_bundesliga' },
+  ]}],
+  'NCAAB': [{ key: 'basketball_ncaab', label: 'NCAAB', inSeason: false, subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: 'Props', markets: 'player_points,player_goals,player_assists', isProps: true },
-    { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
-  'NFL': [{ key: 'americanfootball_nfl', label: 'NFL', subs: [
+  'NCAAF': [{ key: 'americanfootball_ncaaf', label: 'NCAAF', inSeason: false, subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: 'Props', markets: 'player_pass_tds,player_rush_yds,player_receptions', isProps: true },
-    { label: 'Futures', markets: 'h2h', altKey: 'americanfootball_nfl_super_bowl_winner' },
   ]}],
-  'Soccer': [{ key: 'soccer_epl', label: 'EPL', subs: [
-    { label: 'EPL', markets: 'h2h,spreads,totals' },
-    { label: 'MLS', markets: 'h2h,spreads,totals', altKey: 'soccer_usa_mls' },
-    { label: 'UCL', markets: 'h2h,spreads,totals', altKey: 'soccer_uefa_champs_league' },
+  'MMA': [{ key: 'mma_mixed_martial_arts', label: 'MMA', inSeason: true, subs: [
+    { label: 'All',      markets: 'h2h' },
+    { label: 'Method',   markets: 'player_method_of_victory', isProps: true },
+    { label: 'Round',    markets: 'player_first_round_winner', isProps: true },
   ]}],
-  'NCAAB': [{ key: 'basketball_ncaab', label: 'NCAAB', subs: [{ label: 'All', markets: 'h2h,spreads,totals' }] }],
-  'MMA': [{ key: 'mma_mixed_martial_arts', label: 'MMA', subs: [{ label: 'All', markets: 'h2h' }] }],
-  'Golf': [{ key: 'golf', label: 'Golf', subs: [{ label: 'To Win', markets: 'outrights' }] }],
+  'Golf': [{ key: 'golf', label: 'Golf', inSeason: true, subs: [
+    { label: 'To Win',    markets: 'outrights' },
+    { label: 'Matchups',  markets: 'h2h', isGolfMatchups: true },
+  ]}],
+  'Tennis': [{ key: 'tennis_atp_french_open', label: 'Tennis', inSeason: true, subs: [
+    { label: 'All', markets: 'h2h' },
+  ]}],
 };
 
 const ALL_SPORT_KEYS = ['basketball_nba','baseball_mlb','icehockey_nhl','americanfootball_nfl','soccer_epl','soccer_usa_mls','basketball_ncaab','mma_mixed_martial_arts'];
 
+// Map API sport keys → display name
 const SPORT_NAME_MAP = {
   'basketball_nba':'NBA','baseball_mlb':'MLB','icehockey_nhl':'NHL',
-  'americanfootball_nfl':'NFL','soccer_epl':'Soccer','soccer_usa_mls':'Soccer',
+  'americanfootball_nfl':'NFL','americanfootball_ncaaf':'NCAAF',
+  'soccer_epl':'Soccer','soccer_usa_mls':'Soccer','soccer_uefa_champs_league':'Soccer',
+  'soccer_spain_la_liga':'Soccer','soccer_germany_bundesliga':'Soccer',
   'basketball_ncaab':'NCAAB','mma_mixed_martial_arts':'MMA',
-  'golf_pga_championship':'Golf','golf_masters_tournament_winner':'Golf'
+  'tennis_atp_french_open':'Tennis','tennis_wta_french_open':'Tennis',
+  'tennis_atp_us_open':'Tennis','tennis_wta_us_open':'Tennis',
+  'tennis_atp_wimbledon':'Tennis','tennis_wta_wimbledon':'Tennis',
+  'tennis_atp_aus_open':'Tennis','tennis_wta_aus_open':'Tennis',
 };
+// Golf keys mapped dynamically in fetchGolfOdds
 
 // ── HELPERS ──
 function dec2am(d) {
@@ -585,6 +614,7 @@ db.auth.onAuthStateChange(async (event, session) => {
     if (cached) document.getElementById('header-user').textContent = 'Hey, '+cached;
     await loadProfile();
     await loadDashboard();
+    initSportPills();
   }
 });
 
@@ -739,9 +769,24 @@ async function fetchOdds() {
 
   const sub = currentSubSport || { label:'All', markets:'h2h,spreads,totals' };
 
-  // Golf: outrights, dynamic tournament list
+  // Golf: outrights or matchups
   if (currentSport === 'Golf') {
-    await fetchGolfOdds();
+    if (sub?.isGolfMatchups) await fetchGolfMatchups();
+    else await fetchGolfOdds();
+    renderGames();
+    return;
+  }
+
+  // Tennis: dynamic active tournament lookup
+  if (currentSport === 'Tennis') {
+    await fetchTennisOdds();
+    renderGames();
+    return;
+  }
+
+  // NFL Futures (outrights style)
+  if (sub?.isGolfStyle) {
+    await fetchGolfStyleOdds(sub.altKey || (SPORT_KEYS[currentSport]||[])[0]?.key);
     renderGames();
     return;
   }
@@ -872,7 +917,132 @@ async function fetchGolfOdds() {
   } catch(e) { console.warn('Golf sports list error', e); }
 }
 
-// ── PER-EVENT FETCH: props and half/innings markets ──
+// ── GOLF MATCHUPS: per-event h2h between paired players ──
+async function fetchGolfMatchups() {
+  try {
+    const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ODDS_KEY}`);
+    if (!sportsRes.ok) return;
+    const allSports = await sportsRes.json();
+    const golfSports = allSports.filter(s => s.group === 'Golf' && s.active);
+    if (!golfSports.length) {
+      document.getElementById('games-container').innerHTML = '<div class="empty">No active golf tournaments for matchups.</div>';
+      return;
+    }
+    const now = new Date();
+    for (const sport of golfSports.slice(0, 3)) {
+      try {
+        // Get event list for this tournament
+        const evRes = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/events?apiKey=${ODDS_KEY}&dateFormat=iso`);
+        if (!evRes.ok) continue;
+        const events = await evRes.json();
+        const upcoming = events.filter(e => new Date(e.commence_time) > new Date(now - 6*60*60*1000)).slice(0, 30);
+        for (const ev of upcoming.slice(0, 15)) {
+          try {
+            const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/events/${ev.id}/odds?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal&dateFormat=iso`);
+            if (!res.ok) continue;
+            const pData = await res.json();
+            const bk = (pData.bookmakers||[]).find(b => b.key==='draftkings') || (pData.bookmakers||[])[0];
+            if (!bk) continue;
+            const h2h = (bk.markets||[]).find(m => m.key==='h2h');
+            if (!h2h || h2h.outcomes?.length < 2) continue;
+            const p1 = h2h.outcomes[0], p2 = h2h.outcomes[1];
+            const gt = new Date(ev.commence_time);
+            const diffMins = (gt - now) / 60000;
+            let timeStr;
+            if (diffMins < 0) timeStr = 'LIVE';
+            else if (gt.toDateString() === now.toDateString()) timeStr = 'Today ' + gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+            else timeStr = gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+            allGames.push({
+              id: ev.id, sport: sport.title||'Golf',
+              home: p2.name, away: p1.name,
+              isLive: diffMins < 0, time: timeStr, isProp: false,
+              ml:     { home: dec2am(p2.price), away: dec2am(p1.price) },
+              spread: { home:'N/A', away:'N/A', homeOdds:null, awayOdds:null },
+              ou:     { total:'N/A', over:null, under:null }
+            });
+          } catch(e) {}
+        }
+      } catch(e) { console.warn('Golf matchups error', sport.key, e); }
+    }
+  } catch(e) { console.warn('Golf matchups sports error', e); }
+}
+
+// ── OUTRIGHTS (futures) style — NFL SB winner, etc. ──
+async function fetchGolfStyleOdds(sportKey) {
+  if (!sportKey) return;
+  try {
+    const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=outrights&oddsFormat=decimal&dateFormat=iso`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.length) return;
+    const event = data[0];
+    const bk = (event.bookmakers||[]).find(b => b.key==='draftkings') || (event.bookmakers||[])[0];
+    if (!bk) return;
+    const mkt = bk.markets?.find(m => m.key==='outrights');
+    if (!mkt) return;
+    const sorted = [...(mkt.outcomes||[])].sort((a,b) => a.price - b.price);
+    sorted.forEach((item, idx) => {
+      const amOdds = dec2am(item.price);
+      if (!amOdds) return;
+      allGames.push({
+        id: event.id+'_'+idx,
+        sport: SPORT_NAME_MAP[sportKey] || sportKey,
+        home: item.name, away: '',
+        isLive: false, time: '',
+        isGolf: true, tournamentTitle: event.sport_title || sportKey, playerName: item.name, winOdds: amOdds,
+        isProp: false,
+        ml: { home: amOdds, away: null },
+        spread: { home:'', away:'', homeOdds:null, awayOdds:null },
+        ou: { total:'', over:null, under:null }
+      });
+    });
+  } catch(e) { console.warn('fetchGolfStyleOdds error', e); }
+}
+
+// ── TENNIS: find active ATP/WTA tournaments dynamically ──
+async function fetchTennisOdds() {
+  try {
+    const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ODDS_KEY}`);
+    if (!sportsRes.ok) return;
+    const allSports = await sportsRes.json();
+    const tennisSports = allSports.filter(s => s.group === 'Tennis' && s.active);
+    if (!tennisSports.length) {
+      document.getElementById('games-container').innerHTML = '<div class="empty">No active tennis tournaments right now.</div>';
+      return;
+    }
+    const now = new Date();
+    for (const sport of tennisSports.slice(0, 3)) {
+      try {
+        const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal&dateFormat=iso`);
+        if (!res.ok) continue;
+        const data = await res.json();
+        data.filter(g => new Date(g.commence_time) > now).slice(0, 10).forEach(game => {
+          const getMarket = (key) => { for (const b of game.bookmakers||[]) { const m = b.markets?.find(m=>m.key===key); if(m) return m; } return null; };
+          const h2h = getMarket('h2h');
+          if (!h2h) return;
+          const p1 = h2h.outcomes?.find(o => o.name===game.away_team);
+          const p2 = h2h.outcomes?.find(o => o.name===game.home_team);
+          const gt = new Date(game.commence_time);
+          const diffMins = (gt-now)/60000;
+          const today = now.toDateString(), tmrw = new Date(now.getTime()+86400000).toDateString();
+          let timeStr;
+          if (diffMins<0) timeStr='LIVE';
+          else if (gt.toDateString()===today) timeStr='Today '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+          else if (gt.toDateString()===tmrw) timeStr='Tomorrow '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+          else timeStr=gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+          allGames.push({
+            id: game.id, sport: sport.title||'Tennis',
+            home: game.home_team, away: game.away_team,
+            isLive: diffMins<0, time: timeStr, isProp: false,
+            ml:     { home: dec2am(p2?.price), away: dec2am(p1?.price) },
+            spread: { home:'N/A', away:'N/A', homeOdds:null, awayOdds:null },
+            ou:     { total:'N/A', over:null, under:null }
+          });
+        });
+      } catch(e) { console.warn('Tennis fetch error', sport.key, e); }
+    }
+  } catch(e) { console.warn('Tennis sports list error', e); }
+}
 async function fetchPerEventOdds(markets, isProps) {
   const baseKey = (SPORT_KEYS[currentSport]||[])[0]?.key;
   if (!baseKey) return;
@@ -932,20 +1102,31 @@ async function fetchPerEventOdds(markets, isProps) {
             });
           });
         } else {
-          // Half / innings lines
+          // Half / innings lines — search ALL bookmakers for each market key
           const mktList = markets.split(',');
           const h2hKey    = mktList.find(m => m.startsWith('h2h'))    || 'h2h';
           const spreadKey = mktList.find(m => m.startsWith('spread')) || 'spreads';
           const totalKey  = mktList.find(m => m.startsWith('total'))  || 'totals';
-          const getM = k => (bk.markets||[]).find(m => m.key===k);
-          const h2h = getM(h2hKey), spread = getM(spreadKey), total = getM(totalKey);
-          if (!h2h) continue;
-          const homeH2H  = h2h.outcomes?.find(o => o.name===ev.home_team);
-          const awayH2H  = h2h.outcomes?.find(o => o.name===ev.away_team);
+
+          // Search all bookmakers for each market (not just preferred bk)
+          const allBks = pData.bookmakers || [];
+          const findMkt = (key) => {
+            for (const b of allBks) { const m = (b.markets||[]).find(m => m.key===key); if (m) return m; }
+            return null;
+          };
+          const h2h    = findMkt(h2hKey);
+          const spread = findMkt(spreadKey);
+          const total  = findMkt(totalKey);
+          if (!h2h && !spread && !total) continue; // no half lines at all
+
+          const homeH2H  = h2h?.outcomes?.find(o => o.name===ev.home_team);
+          const awayH2H  = h2h?.outcomes?.find(o => o.name===ev.away_team);
           const homeSprd = spread?.outcomes?.find(o => o.name===ev.home_team);
           const awaySprd = spread?.outcomes?.find(o => o.name===ev.away_team);
           const over     = total?.outcomes?.find(o => o.name==='Over');
           const under    = total?.outcomes?.find(o => o.name==='Under');
+          // Require at least ML to show a row
+          if (!homeH2H && !awayH2H) continue;
           allGames.push({
             id: ev.id, sport: SPORT_NAME_MAP[baseKey]||currentSport,
             home: ev.home_team, away: ev.away_team,
@@ -962,6 +1143,18 @@ async function fetchPerEventOdds(markets, isProps) {
   } catch(e) { console.warn('Per-event events list error', e); }
 }
 
+
+// Called once on load to dim out-of-season sport pills
+function initSportPills() {
+  document.querySelectorAll('.sport-pill[data-sport]').forEach(btn => {
+    const sport = btn.dataset.sport;
+    const data = SPORT_KEYS[sport];
+    if (data && data[0]?.inSeason === false) {
+      btn.style.opacity = '0.45';
+      btn.title = `${sport} is currently out of season`;
+    }
+  });
+}
 
 function renderSubSports() {
   const el = document.getElementById('sub-sport-tabs');
