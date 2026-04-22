@@ -430,30 +430,29 @@ let allGames = [], leagueType = 'weekly';
 const SPORT_KEYS = {
   'NBA': [{ key: 'basketball_nba', label: 'NBA', subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: 'Playoffs', markets: 'h2h,spreads,totals' },
-    { label: '1st Half', markets: 'h2h,spreads,totals', period: 'first_half' },
-    { label: 'Props', markets: 'player_points,player_rebounds,player_assists' },
+    { label: 'Props', markets: 'player_points,player_rebounds,player_assists', isProps: true },
+    { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'MLB': [{ key: 'baseball_mlb', label: 'MLB', subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: '1st 5 Inn', markets: 'h2h,spreads,totals', altKey: 'baseball_mlb_1st_5_innings' },
-    { label: 'Props', markets: 'batter_home_runs,batter_hits,pitcher_strikeouts' },
+    { label: '1st 5 Inn', markets: 'h2h,spreads,totals', altMarkets: 'alternate_runline,alternate_totals' },
+    { label: 'Props', markets: 'batter_home_runs,batter_hits,pitcher_strikeouts', isProps: true },
     { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'NHL': [{ key: 'icehockey_nhl', label: 'NHL', subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: 'Playoffs', markets: 'h2h,spreads,totals' },
-    { label: 'Props', markets: 'player_points,player_goals' },
+    { label: 'Props', markets: 'player_points,player_goals,player_assists', isProps: true },
+    { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'NFL': [{ key: 'americanfootball_nfl', label: 'NFL', subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: '1st Half', markets: 'h2h,spreads,totals', period: 'first_half' },
-    { label: 'Props', markets: 'player_pass_tds,player_rush_yds,player_receptions' },
+    { label: 'Props', markets: 'player_pass_tds,player_rush_yds,player_receptions', isProps: true },
     { label: 'Futures', markets: 'h2h', altKey: 'americanfootball_nfl_super_bowl_winner' },
   ]}],
   'Soccer': [{ key: 'soccer_epl', label: 'EPL', subs: [
     { label: 'EPL', markets: 'h2h,spreads,totals' },
     { label: 'MLS', markets: 'h2h,spreads,totals', altKey: 'soccer_usa_mls' },
+    { label: 'UCL', markets: 'h2h,spreads,totals', altKey: 'soccer_uefa_champs_league' },
   ]}],
   'NCAAB': [{ key: 'basketball_ncaab', label: 'NCAAB', subs: [{ label: 'All', markets: 'h2h,spreads,totals' }] }],
   'MMA': [{ key: 'mma_mixed_martial_arts', label: 'MMA', subs: [{ label: 'All', markets: 'h2h' }] }],
@@ -676,16 +675,69 @@ async function joinLeague() {
 async function fetchOdds() {
   document.getElementById('games-container').innerHTML = '<div class="loading">Loading live odds...</div>';
   allGames = [];
+  const sub = typeof currentSubSport === 'object' ? currentSubSport : null;
   let keys, markets = 'h2h,spreads,totals';
+
   if (currentSport==='all') {
     keys = ALL_SPORT_KEYS;
   } else {
-    const sub = typeof currentSubSport === 'object' ? currentSubSport : null;
     const baseKey = (SPORT_KEYS[currentSport]||[])[0]?.key;
     const altKey = sub?.altKey;
     keys = altKey ? [altKey] : (baseKey ? [baseKey] : ALL_SPORT_KEYS);
-    markets = sub?.markets || 'h2h,spreads,totals';
+    markets = sub?.altMarkets || sub?.markets || 'h2h,spreads,totals';
   }
+
+  // Handle props - fetch event IDs first then get props per event
+  if (sub?.isProps) {
+    const baseKey = (SPORT_KEYS[currentSport]||[])[0]?.key;
+    try {
+      const evRes = await fetch(`https://api.the-odds-api.com/v4/sports/${baseKey}/events?apiKey=${ODDS_KEY}&dateFormat=iso`);
+      if (evRes.ok) {
+        const events = await evRes.json();
+        const now = new Date();
+        const upcoming = events.filter(e => new Date(e.commence_time) > new Date(now - 3*60*60*1000)).slice(0,6);
+        for (const ev of upcoming) {
+          try {
+            const pRes = await fetch(`https://api.the-odds-api.com/v4/sports/${baseKey}/events/${ev.id}/odds?apiKey=${ODDS_KEY}&regions=us&markets=${markets}&oddsFormat=decimal&dateFormat=iso`);
+            if (!pRes.ok) continue;
+            const pData = await pRes.json();
+            const gt = new Date(ev.commence_time);
+            const diffMins = (gt-now)/60000;
+            const today=now.toDateString(), tmrw=new Date(now.getTime()+86400000).toDateString();
+            let timeStr;
+            if (diffMins<-30) timeStr='LIVE';
+            else if (diffMins<0) timeStr='Starting Now';
+            else if (gt.toDateString()===today) timeStr='Today '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+            else if (gt.toDateString()===tmrw) timeStr='Tomorrow '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+            else timeStr=gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+            // Build prop bets from bookmaker markets
+            const allMarkets = pData.bookmakers?.[0]?.markets || [];
+            allMarkets.forEach(mkt => {
+              mkt.outcomes?.forEach(outcome => {
+                allGames.push({
+                  id: ev.id+'-'+mkt.key+'-'+outcome.name.replace(/\s/g,'-'),
+                  sport: SPORT_NAME_MAP[baseKey]||currentSport,
+                  home: ev.home_team, away: ev.away_team,
+                  isLive: diffMins<0, time: timeStr,
+                  isProp: true,
+                  propLabel: outcome.name,
+                  propMarket: mkt.key.replace(/_/g,' ').replace(/\w/g,c=>c.toUpperCase()),
+                  propLine: outcome.point ? (outcome.point>0?'+':'')+outcome.point : '',
+                  propOdds: dec2am(outcome.price),
+                  ml:{ home:null, away:null },
+                  spread:{ home:'', away:'', homeOdds:null, awayOdds:null },
+                  ou:{ total:'', over:null, under:null }
+                });
+              });
+            });
+          } catch(e) {}
+        }
+      }
+    } catch(e) { console.log('Props fetch error', e); }
+    renderGames();
+    return;
+  }
+
   for (const sportKey of keys) {
     try {
       const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=${markets}&oddsFormat=decimal&dateFormat=iso`);
