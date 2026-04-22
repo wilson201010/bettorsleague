@@ -236,7 +236,14 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
 .type-btn.active { border: 2px solid var(--gold); background: var(--gold-dim); color: var(--gold); }
 .type-desc { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
-/* ── LOADING / EMPTY ── */
+/* ── COLLAPSIBLE GROUPS ── */
+.collapsible-header { cursor: pointer; user-select: none; }
+.collapsible-header:active { background: var(--surface3); }
+.collapse-arrow { font-size: 11px; color: var(--muted); transition: transform 0.2s; display: inline-block; margin-left: 6px; }
+.collapse-arrow.open { transform: rotate(90deg); }
+.collapsible-body { overflow: hidden; transition: max-height 0.25s ease; }
+.collapsible-body.collapsed { max-height: 0 !important; }
+
 .loading { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 14px; }
 .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 24px 14px; }
 
@@ -912,12 +919,56 @@ async function fetchGolfOdds() {
       document.getElementById('games-container').innerHTML = '<div class="empty">No active golf tournaments right now.</div>';
       return;
     }
-    for (const sport of golfSports.slice(0, 4)) {
+    for (const sport of golfSports.slice(0, 6)) {
       try {
+        // Try outrights first (individual player winner)
         const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=outrights&oddsFormat=decimal&dateFormat=iso`);
         if (!res.ok) continue;
         const data = await res.json();
-        if (!data.length) continue;
+
+        // If no outright data, try h2h (team format events like Zurich Classic)
+        if (!data.length || !data[0].bookmakers?.length) {
+          const h2hRes = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal&dateFormat=iso`);
+          if (!h2hRes.ok) continue;
+          const h2hData = await h2hRes.json();
+          if (!h2hData.length) continue;
+          // For team format: collect all unique teams and their odds to win
+          const teamOdds = {};
+          h2hData.forEach(game => {
+            (game.bookmakers||[]).slice(0,1).forEach(bk => {
+              (bk.markets||[]).filter(m=>m.key==='h2h').forEach(mkt => {
+                (mkt.outcomes||[]).forEach(o => {
+                  if (!teamOdds[o.name] || o.price < teamOdds[o.name]) {
+                    teamOdds[o.name] = o.price; // best (lowest) odds = favorite
+                  }
+                });
+              });
+            });
+          });
+          const sorted = Object.entries(teamOdds).sort((a,b) => a[1]-b[1]);
+          const gt = new Date(h2hData[0].commence_time);
+          const diffMins = (gt - now) / 60000;
+          const timeStr = diffMins < 0 ? 'LIVE' :
+            gt.toDateString()===now.toDateString() ? 'Today' :
+            gt.toDateString()===new Date(now.getTime()+86400000).toDateString() ? 'Tomorrow' :
+            gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+          sorted.forEach(([team, price], idx) => {
+            const amOdds = dec2am(price);
+            if (!amOdds) return;
+            allGames.push({
+              id: sport.key+'_team_'+idx, sport: sport.title||'Golf',
+              home: team, away: '',
+              isLive: diffMins < 0, time: timeStr,
+              isGolf: true, tournamentTitle: sport.title||'Golf', playerName: team, winOdds: amOdds,
+              isProp: false,
+              ml: { home: amOdds, away: null },
+              spread: { home:'', away:'', homeOdds:null, awayOdds:null },
+              ou: { total:'', over:null, under:null }
+            });
+          });
+          continue;
+        }
+
         const event = data[0];
         const gt = new Date(event.commence_time);
         const diffMins = (gt - now) / 60000;
@@ -1325,34 +1376,40 @@ function renderGames() {
 
   // ── Render golf outrights ──
   if (golf.length) {
-    // Group by tournament
     const byTourney = {};
     golf.forEach(g => {
       if (!byTourney[g.tournamentTitle]) byTourney[g.tournamentTitle] = { isLive: g.isLive, time: g.time, rows: [] };
       byTourney[g.tournamentTitle].rows.push(g);
     });
-    Object.entries(byTourney).forEach(([title, t]) => {
+
+    const tourneyKeys = Object.keys(byTourney);
+    tourneyKeys.forEach((title, ti) => {
+      const t = byTourney[title];
+      const gid = 'golf-group-' + ti;
+      const isOpen = ti === 0; // first group open by default
       html += `
         <div class="game-group">
-          <div class="game-group-header">
+          <div class="game-group-header collapsible-header" onclick="toggleCollapse('${gid}')">
             <div style="display:flex;align-items:center;gap:6px;">
               <span class="game-group-title">⛳ ${escHtml(title)}</span>
               ${t.isLive ? '<span class="live-badge">LIVE</span>' : ''}
+              <span class="collapse-arrow ${isOpen?'open':''}">▶</span>
             </div>
-            <span class="game-group-time" style="${t.isLive?'color:var(--green);':''}">${t.time}</span>
+            <span class="game-group-time" style="${t.isLive?'color:var(--green);':''}">
+              ${t.time} · ${t.rows.length} players
+            </span>
           </div>
-          <div style="display:flex;justify-content:space-between;padding:3px 14px;background:var(--surface2);">
-            <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;flex:1;">Player</span>
-            <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;width:80px;text-align:center;">To Win</span>
-          </div>
+          <div id="${gid}" class="collapsible-body${isOpen?'':' collapsed'}" style="max-height:${isOpen?'9999px':'0'}">
+            <div style="display:flex;justify-content:space-between;padding:3px 14px;background:var(--surface2);">
+              <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;flex:1;">Player / Team</span>
+              <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;width:80px;text-align:center;">To Win</span>
+            </div>
       `;
       t.rows.forEach(g => {
         const sel = isSelected(g.id, 'gw') ? ' selected' : '';
         html += `
           <div class="prop-row" style="cursor:pointer;" onclick="toggleBet('${g.id}','gw','${escAttr(g.playerName)} (To Win ${escAttr(g.tournamentTitle)})','${g.winOdds}','Golf')">
-            <div class="prop-player" style="flex:1;">
-              <div class="prop-name">${escHtml(g.playerName)}</div>
-            </div>
+            <div class="prop-player" style="flex:1;"><div class="prop-name">${escHtml(g.playerName)}</div></div>
             <div style="width:80px;text-align:center;">
               <div class="prop-cell${sel}" style="display:inline-block;min-width:70px;">
                 <span class="prop-cell-odds">${g.winOdds}</span>
@@ -1361,14 +1418,13 @@ function renderGames() {
           </div>
         `;
       });
-      html += `</div>`;
+      html += `</div></div>`;
     });
     return void (el.innerHTML = html);
   }
 
   // ── Render props ──
   if (props.length) {
-    // Group props by game (home @ away)
     const byGame = {};
     props.forEach(p => {
       const gameKey = `${p.away} @ ${p.home}`;
@@ -1376,26 +1432,31 @@ function renderGames() {
       byGame[gameKey].rows.push(p);
     });
 
-    html += `<div class="sec-title">Player Props (${props.length})</div>`;
-    Object.entries(byGame).forEach(([gameKey, gameData]) => {
-      html += `<div class="game-group">`;
+    const gameKeys = Object.keys(byGame);
+    html += `<div class="sec-title">Player Props (${props.length} markets · ${gameKeys.length} games)</div>`;
+    gameKeys.forEach((gameKey, gi) => {
+      const gameData = byGame[gameKey];
+      const gid = 'prop-group-' + gi;
+      const isOpen = gi === 0;
       html += `
-        <div class="game-group-header">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span class="game-group-title">${gameData.sport} — ${gameKey}</span>
-            ${gameData.isLive ? '<span class="live-badge">LIVE</span>' : ''}
+        <div class="game-group">
+          <div class="game-group-header collapsible-header" onclick="toggleCollapse('${gid}')">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="game-group-title">${gameData.sport} — ${gameKey}</span>
+              ${gameData.isLive ? '<span class="live-badge">LIVE</span>' : ''}
+              <span class="collapse-arrow ${isOpen?'open':''}">▶</span>
+            </div>
+            <span class="game-group-time" style="${gameData.isLive?'color:var(--green);':''}">
+              ${gameData.time} · ${gameData.rows.length} props
+            </span>
           </div>
-          <span class="game-group-time" style="${gameData.isLive?'color:var(--green);':''}">${gameData.time}</span>
-        </div>
-      `;
-      // Column headers
-      html += `
-        <div style="display:flex;justify-content:space-between;padding:3px 14px;background:var(--surface2);">
-          <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;flex:1;">Player / Market</span>
-          <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;width:34px;text-align:center;">Line</span>
-          <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;width:66px;text-align:center;">Over</span>
-          <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;width:66px;text-align:center;">Under</span>
-        </div>
+          <div id="${gid}" class="collapsible-body${isOpen?'':' collapsed'}" style="max-height:${isOpen?'9999px':'0'}">
+            <div style="display:flex;justify-content:space-between;padding:3px 14px;background:var(--surface2);">
+              <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;flex:1;">Player / Market</span>
+              <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;width:34px;text-align:center;">Line</span>
+              <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;width:66px;text-align:center;">Over</span>
+              <span style="font-size:9px;text-transform:uppercase;color:var(--muted);letter-spacing:0.5px;width:66px;text-align:center;">Under</span>
+            </div>
       `;
       gameData.rows.forEach(p => {
         const ovSel  = isSelected(p.id, 'pov') ? ' selected' : '';
@@ -1426,9 +1487,9 @@ function renderGames() {
           </div>
         `;
       });
-      html += `</div>`;
+      html += `</div></div>`;
     });
-    return void (el.innerHTML = html); // props only view — done
+    return void (el.innerHTML = html);
   }
 
   // ── Render regular games ──
@@ -1502,6 +1563,23 @@ function oddsCell(g, betKey, line, odds, pick) {
       <span class="odds-line">${escHtml(line)}</span>
       <span class="odds-val">${displayOdds}</span>
     </div>`;
+}
+
+function toggleCollapse(id) {
+  const body = document.getElementById(id);
+  const header = body?.previousElementSibling;
+  const arrow = header?.querySelector('.collapse-arrow');
+  if (!body) return;
+  const isOpen = !body.classList.contains('collapsed');
+  if (isOpen) {
+    body.classList.add('collapsed');
+    body.style.maxHeight = '0';
+    if (arrow) arrow.classList.remove('open');
+  } else {
+    body.classList.remove('collapsed');
+    body.style.maxHeight = '9999px';
+    if (arrow) arrow.classList.add('open');
+  }
 }
 
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
