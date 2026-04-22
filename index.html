@@ -109,18 +109,18 @@
 
     /* ── GAME ROWS (sunwager style) ── */
     .game-group { margin-bottom: 2px; }
-    .game-group-header { background: var(--surface2); padding: 6px 14px; display: flex; align-items: center; justify-content: space-between; }
+    .game-group-header { background: var(--surface2); padding: 6px 14px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 2; }
     .game-group-title { font-size: 11px; font-weight: 600; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.5px; }
     .game-group-time { font-size: 11px; color: var(--muted); }
     .live-badge { background: var(--live); color: #fff; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 1px; }
 
     .game-row { background: var(--surface); border-bottom: 1px solid var(--border); }
     .game-teams { display: flex; flex-direction: column; }
-    .team-row { display: flex; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+    .team-row { display: flex; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border); justify-content: space-between; }
     .team-row:last-child { border-bottom: none; }
-    .team-name { flex: 1; font-size: 13px; font-weight: 500; }
+    .team-name { flex: 1; font-size: 13px; font-weight: 500; min-width: 0; padding-right: 8px; }
     .team-score { font-size: 13px; font-weight: 600; color: var(--muted2); margin-right: 8px; min-width: 20px; text-align: center; }
-    .odds-cells { display: flex; gap: 1px; }
+    .odds-cells { display: flex; gap: 1px; flex-shrink: 0; }
     .odds-cell { background: var(--surface2); width: 72px; padding: 6px 4px; text-align: center; cursor: pointer; border-radius: 3px; transition: all 0.1s; flex-shrink: 0; }
     .odds-cell:active { transform: scale(0.96); }
     .odds-cell.selected { background: var(--gold); }
@@ -129,7 +129,7 @@
     .odds-line { font-size: 11px; color: var(--muted2); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .odds-val { font-size: 12px; font-weight: 600; color: var(--gold); display: block; }
     .odds-cell.selected .odds-val { color: #0a0d13; font-weight: 700; }
-    .odds-header { display: flex; justify-content: flex-end; padding: 4px 14px; gap: 1px; }
+    .odds-header { display: flex; justify-content: flex-end; padding: 4px 14px 4px; gap: 1px; flex-shrink: 0; margin-left: auto; }
     .odds-header-cell { width: 72px; text-align: center; font-size: 9px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px; }
 
     /* ── BET SLIP ── */
@@ -428,14 +428,36 @@ let slipItems = [], betType = 'straight', currentSport = 'all', currentSubSport 
 let allGames = [], leagueType = 'weekly';
 
 const SPORT_KEYS = {
-  'NBA': [{ key: 'basketball_nba', label: 'NBA', subs: ['All', 'Playoffs', '1st Half', 'Props'] }],
-  'MLB': [{ key: 'baseball_mlb', label: 'MLB', subs: ['All', '1st 5 Inn', 'Props', 'Live'] }],
-  'NHL': [{ key: 'icehockey_nhl', label: 'NHL', subs: ['All', 'Playoffs', 'Props'] }],
-  'NFL': [{ key: 'americanfootball_nfl', label: 'NFL', subs: ['All', 'Props', 'Futures'] }],
-  'Soccer': [{ key: 'soccer_epl', label: 'EPL' }, { key: 'soccer_usa_mls', label: 'MLS' }],
-  'NCAAB': [{ key: 'basketball_ncaab', label: 'NCAAB', subs: ['All'] }],
-  'MMA': [{ key: 'mma_mixed_martial_arts', label: 'MMA', subs: ['All'] }],
-  'Golf': [{ key: 'golf_pga_championship', label: 'PGA', subs: ['All'] }],
+  'NBA': [{ key: 'basketball_nba', label: 'NBA', subs: [
+    { label: 'All', markets: 'h2h,spreads,totals' },
+    { label: 'Playoffs', markets: 'h2h,spreads,totals' },
+    { label: '1st Half', markets: 'h2h,spreads,totals', period: 'first_half' },
+    { label: 'Props', markets: 'player_points,player_rebounds,player_assists' },
+  ]}],
+  'MLB': [{ key: 'baseball_mlb', label: 'MLB', subs: [
+    { label: 'All', markets: 'h2h,spreads,totals' },
+    { label: '1st 5 Inn', markets: 'h2h,spreads,totals', altKey: 'baseball_mlb_1st_5_innings' },
+    { label: 'Props', markets: 'batter_home_runs,batter_hits,pitcher_strikeouts' },
+    { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
+  ]}],
+  'NHL': [{ key: 'icehockey_nhl', label: 'NHL', subs: [
+    { label: 'All', markets: 'h2h,spreads,totals' },
+    { label: 'Playoffs', markets: 'h2h,spreads,totals' },
+    { label: 'Props', markets: 'player_points,player_goals' },
+  ]}],
+  'NFL': [{ key: 'americanfootball_nfl', label: 'NFL', subs: [
+    { label: 'All', markets: 'h2h,spreads,totals' },
+    { label: '1st Half', markets: 'h2h,spreads,totals', period: 'first_half' },
+    { label: 'Props', markets: 'player_pass_tds,player_rush_yds,player_receptions' },
+    { label: 'Futures', markets: 'h2h', altKey: 'americanfootball_nfl_super_bowl_winner' },
+  ]}],
+  'Soccer': [{ key: 'soccer_epl', label: 'EPL', subs: [
+    { label: 'EPL', markets: 'h2h,spreads,totals' },
+    { label: 'MLS', markets: 'h2h,spreads,totals', altKey: 'soccer_usa_mls' },
+  ]}],
+  'NCAAB': [{ key: 'basketball_ncaab', label: 'NCAAB', subs: [{ label: 'All', markets: 'h2h,spreads,totals' }] }],
+  'MMA': [{ key: 'mma_mixed_martial_arts', label: 'MMA', subs: [{ label: 'All', markets: 'h2h' }] }],
+  'Golf': [{ key: 'golf_pga_championship', label: 'PGA', subs: [{ label: 'All', markets: 'h2h' }] }],
 };
 
 const ALL_SPORT_KEYS = ['basketball_nba','baseball_mlb','icehockey_nhl','americanfootball_nfl','soccer_epl','soccer_usa_mls','basketball_ncaab','mma_mixed_martial_arts'];
@@ -654,20 +676,31 @@ async function joinLeague() {
 async function fetchOdds() {
   document.getElementById('games-container').innerHTML = '<div class="loading">Loading live odds...</div>';
   allGames = [];
-  const keys = currentSport==='all' ? ALL_SPORT_KEYS : (SPORT_KEYS[currentSport]||[]).map(s=>s.key);
+  let keys, markets = 'h2h,spreads,totals';
+  if (currentSport==='all') {
+    keys = ALL_SPORT_KEYS;
+  } else {
+    const sub = typeof currentSubSport === 'object' ? currentSubSport : null;
+    const baseKey = (SPORT_KEYS[currentSport]||[])[0]?.key;
+    const altKey = sub?.altKey;
+    keys = altKey ? [altKey] : (baseKey ? [baseKey] : ALL_SPORT_KEYS);
+    markets = sub?.markets || 'h2h,spreads,totals';
+  }
   for (const sportKey of keys) {
     try {
-      const markets = sportKey.includes('golf') ? 'h2h' : 'h2h,spreads,totals';
       const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=${markets}&oddsFormat=decimal&dateFormat=iso`);
       if (!res.ok) continue;
       const data = await res.json();
       const now = new Date();
-      data.filter(g => new Date(g.commence_time) > new Date(now - 3*60*60*1000))
+      const sub = typeof currentSubSport === "object" ? currentSubSport : null;
+          data.filter(g => sub?.liveOnly ? new Date(g.commence_time) <= now : new Date(g.commence_time) > new Date(now - 3*60*60*1000))
         .slice(0,15)
         .forEach(game => {
           const getMarket = (key) => { for (const b of game.bookmakers||[]) { const m=b.markets?.find(m=>m.key===key); if(m) return m; } return null; };
           const h2h=getMarket('h2h'), spread=getMarket('spreads'), total=getMarket('totals');
-          if (!h2h) return;
+          // For props markets, use first available market as h2h fallback
+          const firstMarket = game.bookmakers?.[0]?.markets?.[0];
+          if (!h2h && !firstMarket) return;
           const homeH2H=h2h.outcomes?.find(o=>o.name===game.home_team);
           const awayH2H=h2h.outcomes?.find(o=>o.name===game.away_team);
           const homeSprd=spread?.outcomes?.find(o=>o.name===game.home_team);
@@ -703,15 +736,18 @@ function renderSubSports() {
   const sportData = SPORT_KEYS[currentSport];
   if (!sportData?.[0]?.subs) { el.innerHTML=''; el.style.display='none'; return; }
   el.style.display='flex';
+  currentSubSport = sportData[0].subs[0];
   el.innerHTML = sportData[0].subs.map((s,i) =>
-    `<button class="sub-pill${i===0?' active':''}" onclick="setSubSport('${s}',this)">${s}</button>`
+    `<button class="sub-pill${i===0?' active':''}" onclick="setSubSport(${i},this)">${s.label}</button>`
   ).join('');
 }
 
-function setSubSport(sub, btn) {
-  currentSubSport = sub;
+function setSubSport(idx, btn) {
+  const sportData = SPORT_KEYS[currentSport];
+  currentSubSport = sportData?.[0]?.subs?.[idx] || {label:'All', markets:'h2h,spreads,totals'};
   document.querySelectorAll('.sub-pill').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
+  fetchOdds();
 }
 
 function setSport(sport, btn) {
