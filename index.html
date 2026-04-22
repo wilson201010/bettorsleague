@@ -435,7 +435,7 @@ const SPORT_KEYS = {
   ]}],
   'MLB': [{ key: 'baseball_mlb', label: 'MLB', subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: '1st 5 Inn', markets: 'h2h,spreads,totals', altMarkets: 'alternate_runline,alternate_totals' },
+    { label: '1st 5 Inn', markets: 'h2h,alternate_runline,alternate_totals' },
     { label: 'Props', markets: 'batter_home_runs,batter_hits,pitcher_strikeouts', isProps: true },
     { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
@@ -684,7 +684,7 @@ async function fetchOdds() {
     const baseKey = (SPORT_KEYS[currentSport]||[])[0]?.key;
     const altKey = sub?.altKey;
     keys = altKey ? [altKey] : (baseKey ? [baseKey] : ALL_SPORT_KEYS);
-    markets = sub?.altMarkets || sub?.markets || 'h2h,spreads,totals';
+    markets = sub?.markets || 'h2h,spreads,totals';
   }
 
   // Handle props - fetch event IDs first then get props per event
@@ -692,46 +692,54 @@ async function fetchOdds() {
     const baseKey = (SPORT_KEYS[currentSport]||[])[0]?.key;
     try {
       const evRes = await fetch(`https://api.the-odds-api.com/v4/sports/${baseKey}/events?apiKey=${ODDS_KEY}&dateFormat=iso`);
-      if (evRes.ok) {
-        const events = await evRes.json();
-        const now = new Date();
-        const upcoming = events.filter(e => new Date(e.commence_time) > new Date(now - 3*60*60*1000)).slice(0,6);
-        for (const ev of upcoming) {
-          try {
-            const pRes = await fetch(`https://api.the-odds-api.com/v4/sports/${baseKey}/events/${ev.id}/odds?apiKey=${ODDS_KEY}&regions=us&markets=${markets}&oddsFormat=decimal&dateFormat=iso`);
-            if (!pRes.ok) continue;
-            const pData = await pRes.json();
-            const gt = new Date(ev.commence_time);
-            const diffMins = (gt-now)/60000;
-            const today=now.toDateString(), tmrw=new Date(now.getTime()+86400000).toDateString();
-            let timeStr;
-            if (diffMins<-30) timeStr='LIVE';
-            else if (diffMins<0) timeStr='Starting Now';
-            else if (gt.toDateString()===today) timeStr='Today '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
-            else if (gt.toDateString()===tmrw) timeStr='Tomorrow '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
-            else timeStr=gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-            // Build prop bets from bookmaker markets
-            const allMarkets = pData.bookmakers?.[0]?.markets || [];
-            allMarkets.forEach(mkt => {
-              mkt.outcomes?.forEach(outcome => {
-                allGames.push({
-                  id: ev.id+'-'+mkt.key+'-'+outcome.name.replace(/\s/g,'-'),
-                  sport: SPORT_NAME_MAP[baseKey]||currentSport,
-                  home: ev.home_team, away: ev.away_team,
-                  isLive: diffMins<0, time: timeStr,
-                  isProp: true,
-                  propLabel: outcome.name,
-                  propMarket: mkt.key.replace(/_/g,' ').replace(/\w/g,c=>c.toUpperCase()),
-                  propLine: outcome.point ? (outcome.point>0?'+':'')+outcome.point : '',
-                  propOdds: dec2am(outcome.price),
-                  ml:{ home:null, away:null },
-                  spread:{ home:'', away:'', homeOdds:null, awayOdds:null },
-                  ou:{ total:'', over:null, under:null }
-                });
+      if (!evRes.ok) { document.getElementById('games-container').innerHTML='<div class="empty">Props unavailable right now.</div>'; return; }
+      const events = await evRes.json();
+      const now = new Date();
+      const upcoming = events.filter(e => new Date(e.commence_time) > new Date(now - 3*60*60*1000)).slice(0,5);
+      if (!upcoming.length) { document.getElementById('games-container').innerHTML='<div class="empty">No upcoming games for props.</div>'; return; }
+      // Fetch props for each game, but limit to first bookmaker and deduplicate by player+market
+      for (const ev of upcoming) {
+        try {
+          const pRes = await fetch(`https://api.the-odds-api.com/v4/sports/${baseKey}/events/${ev.id}/odds?apiKey=${ODDS_KEY}&regions=us&markets=${markets}&oddsFormat=decimal&dateFormat=iso`);
+          if (!pRes.ok) continue;
+          const pData = await pRes.json();
+          const gt = new Date(ev.commence_time);
+          const diffMins = (gt-now)/60000;
+          let timeStr = gt.toDateString()===now.toDateString() ? 'Today '+gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'}) : gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+          if (diffMins<0) timeStr='LIVE';
+          // Use only first bookmaker, group outcomes by market key into over/under pairs
+          const bkMkts = pData.bookmakers?.[0]?.markets || [];
+          const seen = new Set();
+          bkMkts.forEach(mkt => {
+            // Group by player name - find Over/Under pairs
+            const byPlayer = {};
+            mkt.outcomes?.forEach(o => {
+              const playerKey = o.description || o.name;
+              if (!byPlayer[playerKey]) byPlayer[playerKey] = {};
+              byPlayer[playerKey][o.name] = o;
+            });
+            Object.entries(byPlayer).forEach(([player, sides]) => {
+              const uid = ev.id+mkt.key+player;
+              if (seen.has(uid)) return;
+              seen.add(uid);
+              const overOut = sides['Over'] || Object.values(sides)[0];
+              const underOut = sides['Under'] || Object.values(sides)[1];
+              allGames.push({
+                id: uid,
+                sport: SPORT_NAME_MAP[baseKey]||currentSport,
+                home: ev.home_team, away: ev.away_team,
+                isLive: diffMins<0, time: timeStr,
+                isProp: true,
+                propPlayer: player,
+                propMarket: mkt.key.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),
+                propLine: overOut?.point ?? '',
+                propOverOdds: dec2am(overOut?.price),
+                propUnderOdds: dec2am(underOut?.price),
+                ml:{home:null,away:null}, spread:{home:'',away:'',homeOdds:null,awayOdds:null}, ou:{total:'',over:null,under:null}
               });
             });
-          } catch(e) {}
-        }
+          });
+        } catch(e) {}
       }
     } catch(e) { console.log('Props fetch error', e); }
     renderGames();
