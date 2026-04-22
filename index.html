@@ -523,6 +523,9 @@ const SPORT_KEYS = {
   'Golf': [{ key: 'golf', label: 'Golf', inSeason: true, subs: [
     { label: 'To Win',    markets: 'outrights' },
     { label: 'Matchups',  markets: 'h2h', isGolfMatchups: true },
+    { label: 'Top 5',     markets: 'outrights', altKey: null, isGolfStyle: false, topFinish: 'top_5_finish' },
+    { label: 'Top 10',    markets: 'outrights', altKey: null, isGolfStyle: false, topFinish: 'top_10_finish' },
+    { label: 'Top 20',    markets: 'outrights', altKey: null, isGolfStyle: false, topFinish: 'top_20_finish' },
   ]}],
   'Tennis': [{ key: 'tennis_atp_french_open', label: 'Tennis', inSeason: true, subs: [
     { label: 'All', markets: 'h2h' },
@@ -769,9 +772,10 @@ async function fetchOdds() {
 
   const sub = currentSubSport || { label:'All', markets:'h2h,spreads,totals' };
 
-  // Golf: outrights or matchups
+  // Golf: outrights or matchups or top-finish markets
   if (currentSport === 'Golf') {
     if (sub?.isGolfMatchups) await fetchGolfMatchups();
+    else if (sub?.topFinish) await fetchGolfTopFinish(sub.topFinish);
     else await fetchGolfOdds();
     renderGames();
     return;
@@ -917,7 +921,7 @@ async function fetchGolfOdds() {
   } catch(e) { console.warn('Golf sports list error', e); }
 }
 
-// ── GOLF MATCHUPS: per-event h2h between paired players ──
+// ── GOLF MATCHUPS: bulk h2h endpoint returns all round matchups at once ──
 async function fetchGolfMatchups() {
   try {
     const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ODDS_KEY}`);
@@ -929,40 +933,59 @@ async function fetchGolfMatchups() {
       return;
     }
     const now = new Date();
-    for (const sport of golfSports.slice(0, 3)) {
+    for (const sport of golfSports.slice(0, 4)) {
       try {
-        // Get event list for this tournament
-        const evRes = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/events?apiKey=${ODDS_KEY}&dateFormat=iso`);
-        if (!evRes.ok) continue;
-        const events = await evRes.json();
-        const upcoming = events.filter(e => new Date(e.commence_time) > new Date(now - 6*60*60*1000)).slice(0, 30);
-        for (const ev of upcoming.slice(0, 15)) {
-          try {
-            const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/events/${ev.id}/odds?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal&dateFormat=iso`);
-            if (!res.ok) continue;
-            const pData = await res.json();
-            const bk = (pData.bookmakers||[]).find(b => b.key==='draftkings') || (pData.bookmakers||[])[0];
-            if (!bk) continue;
-            const h2h = (bk.markets||[]).find(m => m.key==='h2h');
-            if (!h2h || h2h.outcomes?.length < 2) continue;
-            const p1 = h2h.outcomes[0], p2 = h2h.outcomes[1];
-            const gt = new Date(ev.commence_time);
-            const diffMins = (gt - now) / 60000;
-            let timeStr;
-            if (diffMins < 0) timeStr = 'LIVE';
-            else if (gt.toDateString() === now.toDateString()) timeStr = 'Today ' + gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-            else timeStr = gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-            allGames.push({
-              id: ev.id, sport: sport.title||'Golf',
-              home: p2.name, away: p1.name,
-              isLive: diffMins < 0, time: timeStr, isProp: false,
-              ml:     { home: dec2am(p2.price), away: dec2am(p1.price) },
-              spread: { home:'N/A', away:'N/A', homeOdds:null, awayOdds:null },
-              ou:     { total:'N/A', over:null, under:null }
-            });
-          } catch(e) {}
-        }
+        // Bulk odds endpoint with h2h market — returns ALL matchup events for this tournament
+        const res = await fetch(
+          `https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal&dateFormat=iso`
+        );
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (!data.length) continue;
+
+        // Include live + upcoming matchups (started within 12hrs)
+        const relevant = data.filter(g =>
+          new Date(g.commence_time) > new Date(now - 12*60*60*1000)
+        );
+
+        relevant.forEach(game => {
+          const getMarket = (key) => {
+            for (const b of game.bookmakers||[]) {
+              const m = b.markets?.find(m => m.key===key);
+              if (m) return m;
+            }
+            return null;
+          };
+          const h2h = getMarket('h2h');
+          if (!h2h || h2h.outcomes?.length < 2) return;
+
+          const p1 = h2h.outcomes[0], p2 = h2h.outcomes[1];
+          const gt = new Date(game.commence_time);
+          const diffMins = (gt - now) / 60000;
+          const today = now.toDateString(), tmrw = new Date(now.getTime()+86400000).toDateString();
+          let timeStr;
+          if (diffMins < -60)                timeStr = 'LIVE';
+          else if (diffMins < 0)             timeStr = 'Starting Now';
+          else if (gt.toDateString()===today) timeStr = 'Today ' + gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+          else if (gt.toDateString()===tmrw)  timeStr = 'Tomorrow ' + gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+          else timeStr = gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+
+          allGames.push({
+            id: game.id,
+            sport: sport.title || 'Golf',
+            home: p2.name, away: p1.name,
+            isLive: diffMins < 0, time: timeStr, isProp: false,
+            ml:     { home: dec2am(p2.price), away: dec2am(p1.price) },
+            spread: { home:'N/A', away:'N/A', homeOdds:null, awayOdds:null },
+            ou:     { total:'N/A', over:null, under:null }
+          });
+        });
       } catch(e) { console.warn('Golf matchups error', sport.key, e); }
+    }
+
+    if (!allGames.length) {
+      document.getElementById('games-container').innerHTML =
+        '<div class="empty">No matchup odds available yet. Check back closer to tee time.</div>';
     }
   } catch(e) { console.warn('Golf matchups sports error', e); }
 }
@@ -1000,7 +1023,64 @@ async function fetchGolfStyleOdds(sportKey) {
 }
 
 // ── TENNIS: find active ATP/WTA tournaments dynamically ──
-async function fetchTennisOdds() {
+async function fetchGolfTopFinish(marketKey) {
+  try {
+    const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ODDS_KEY}`);
+    if (!sportsRes.ok) return;
+    const allSports = await sportsRes.json();
+    const golfSports = allSports.filter(s => s.group === 'Golf' && s.active);
+    if (!golfSports.length) return;
+    const now = new Date();
+    for (const sport of golfSports.slice(0, 4)) {
+      try {
+        // Top-finish markets live on the event-odds endpoint
+        const evRes = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/events?apiKey=${ODDS_KEY}&dateFormat=iso`);
+        if (!evRes.ok) continue;
+        const events = await evRes.json();
+        // For outrights/futures, there's usually just one event per tournament
+        const ev = events[0];
+        if (!ev) continue;
+        const res = await fetch(
+          `https://api.the-odds-api.com/v4/sports/${sport.key}/events/${ev.id}/odds?apiKey=${ODDS_KEY}&regions=us&markets=${marketKey}&oddsFormat=decimal&dateFormat=iso`
+        );
+        if (!res.ok) continue;
+        const pData = await res.json();
+        const bk = (pData.bookmakers||[]).find(b => b.key==='draftkings') || (pData.bookmakers||[])[0];
+        if (!bk) continue;
+        const mkt = (bk.markets||[]).find(m => m.key === marketKey);
+        if (!mkt) continue;
+        const gt = new Date(ev.commence_time);
+        const diffMins = (gt - now) / 60000;
+        let timeStr = diffMins < 0 ? 'LIVE' : gt.toDateString()===now.toDateString() ? 'Today' :
+          gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+        const label = marketKey.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+        const sorted = [...(mkt.outcomes||[])].sort((a,b) => a.price - b.price);
+        sorted.forEach((player, idx) => {
+          const amOdds = dec2am(player.price);
+          if (!amOdds) return;
+          allGames.push({
+            id: ev.id+'_'+marketKey+'_'+idx,
+            sport: sport.title||'Golf',
+            home: player.name, away: '',
+            isLive: diffMins < 0, time: timeStr,
+            isGolf: true,
+            tournamentTitle: `${sport.title||'Golf'} — ${label}`,
+            playerName: player.name, winOdds: amOdds,
+            isProp: false,
+            ml: { home: amOdds, away: null },
+            spread: { home:'', away:'', homeOdds:null, awayOdds:null },
+            ou: { total:'', over:null, under:null }
+          });
+        });
+      } catch(e) { console.warn('Golf top-finish error', sport.key, e); }
+    }
+    if (!allGames.length) {
+      document.getElementById('games-container').innerHTML = '<div class="empty">Top finish odds not available yet for current tournaments.</div>';
+    }
+  } catch(e) { console.warn('fetchGolfTopFinish error', e); }
+}
+
+
   try {
     const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ODDS_KEY}`);
     if (!sportsRes.ok) return;
