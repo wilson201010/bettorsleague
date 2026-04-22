@@ -28,6 +28,19 @@
       --live: #22c55e;
     }
     html, body { height: 100%; background: var(--dark); color: var(--text); font-family: 'DM Sans', sans-serif; overflow-x: hidden; }
+    @media (min-width: 768px) {
+      .app-header { padding: 10px 24px; }
+      .app-nav { padding: 0 8px; }
+      .sport-scroll { padding: 10px 8px; }
+      .sub-sport-scroll { padding: 6px 8px; }
+      .page-pad { padding: 14px; }
+      #games-container, #open-bets, #settled-bets, #dash-leagues-list, #leagues-list { max-width: 780px; margin: 0 auto; }
+      .stat-grid { max-width: 780px; margin: 0 auto 14px; }
+      .sec-title { max-width: 780px; margin: 0 auto; padding: 10px 0 6px; }
+      .slip-bar { max-width: 780px; margin: 0 auto; }
+      .action-btn { max-width: 752px; }
+      .game-group-header { position: sticky; top: 0; z-index: 2; }
+    }
 
     /* ── AUTH ── */
     #auth-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; background: var(--dark); }
@@ -116,7 +129,7 @@
 
     .game-row { background: var(--surface); border-bottom: 1px solid var(--border); }
     .game-teams { display: flex; flex-direction: column; }
-    .team-row { display: flex; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border); justify-content: space-between; }
+    .team-row { display: flex; align-items: center; padding: 7px 14px; border-bottom: 1px solid var(--border); justify-content: space-between; }
     .team-row:last-child { border-bottom: none; }
     .team-name { flex: 1; font-size: 13px; font-weight: 500; min-width: 0; padding-right: 8px; }
     .team-score { font-size: 13px; font-weight: 600; color: var(--muted2); margin-right: 8px; min-width: 20px; text-align: center; }
@@ -206,9 +219,14 @@
 
     /* ── MOBILE OPTIMIZATIONS ── */
     @media (max-width: 480px) {
-      .odds-cell { width: 66px; }
-      .odds-header-cell { width: 66px; }
+      .odds-cell { width: 62px; }
+      .odds-header-cell { width: 62px; }
       .stat-val { font-size: 22px; }
+    }
+    @media (min-width: 600px) {
+      .odds-cell { width: 90px; }
+      .odds-header-cell { width: 90px; }
+      .team-name { font-size: 14px; }
     }
 
     .positive { color: var(--green); }
@@ -419,7 +437,7 @@
 <script>
 const SUPABASE_URL = 'https://fexbrsplfongvardrarb.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZleGJyc3BsZm9uZ3ZhcmRyYXJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxODUzNzgsImV4cCI6MjA5MTc2MTM3OH0.K9umByuKZn4BxgKSyfoZI_Q2CeS2I1b3WmdNuQco9QA';
-const ODDS_KEY = 'c1869a9a987db1c5e02ff83a6251831d';
+const ODDS_KEY = '8320dd8ef90400c2e6584b24325f66fd';
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -430,13 +448,14 @@ let allGames = [], leagueType = 'weekly';
 const SPORT_KEYS = {
   'NBA': [{ key: 'basketball_nba', label: 'NBA', subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: 'Props', markets: 'player_points,player_rebounds,player_assists', isProps: true },
+    { label: '1st Half', markets: 'h2h,alternate_spreads,alternate_totals' },
+    { label: 'Props', markets: 'player_points,player_rebounds,player_assists,player_threes', isProps: true },
     { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'MLB': [{ key: 'baseball_mlb', label: 'MLB', subs: [
     { label: 'All', markets: 'h2h,spreads,totals' },
-    { label: '1st 5 Inn', markets: 'h2h,spreads,totals' },
-    { label: 'Props', markets: 'batter_home_runs,batter_hits,pitcher_strikeouts', isProps: true },
+    { label: '1st 5 Inn', markets: 'h2h,alternate_runline,alternate_totals' },
+    { label: 'Props', markets: 'batter_home_runs,batter_hits,pitcher_strikeouts,batter_total_bases', isProps: true },
     { label: 'Live', markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'NHL': [{ key: 'icehockey_nhl', label: 'NHL', subs: [
@@ -756,12 +775,14 @@ async function fetchOdds() {
       const now = new Date();
       console.log('Games from API for', sportKey, ':', data.length);
       const seenGames = new Set(allGames.map(g=>g.id));
-      data.filter(g => sub?.liveOnly ? new Date(g.commence_time) <= now : new Date(g.commence_time) > new Date(now - 3*60*60*1000))
+      data.filter(g => sub?.liveOnly ? new Date(g.commence_time) <= now : new Date(g.commence_time) > now)
         .filter(g => !seenGames.has(g.id))
         .slice(0,15)
         .forEach(game => {
           const getMarket = (key) => { for (const b of game.bookmakers||[]) { const m=b.markets?.find(m=>m.key===key); if(m) return m; } return null; };
-          const h2h=getMarket('h2h'), spread=getMarket('spreads'), total=getMarket('totals');
+          const h2h=getMarket('h2h');
+          const spread=getMarket('spreads')||getMarket('alternate_runline');
+          const total=getMarket('totals')||getMarket('alternate_totals');
           if (!h2h) return;
           const homeH2H=h2h.outcomes?.find(o=>o.name===game.home_team);
           const awayH2H=h2h.outcomes?.find(o=>o.name===game.away_team);
