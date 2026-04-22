@@ -531,11 +531,11 @@ const SPORT_KEYS = {
     { label: 'Round',    markets: 'player_first_round_winner', isProps: true },
   ]}],
   'Golf': [{ key: 'golf', label: 'Golf', inSeason: true, subs: [
-    { label: 'To Win',    markets: 'outrights' },
-    { label: 'Matchups',  markets: 'h2h', isGolfMatchups: true },
-    { label: 'Top 5',     markets: 'outrights', altKey: null, isGolfStyle: false, topFinish: 'top_5_finish' },
-    { label: 'Top 10',    markets: 'outrights', altKey: null, isGolfStyle: false, topFinish: 'top_10_finish' },
-    { label: 'Top 20',    markets: 'outrights', altKey: null, isGolfStyle: false, topFinish: 'top_20_finish' },
+    { label: 'To Win',  markets: 'outrights' },
+    { label: 'Top 5',  markets: 'outrights', topFinish: 'top_5_finish' },
+    { label: 'Top 10', markets: 'outrights', topFinish: 'top_10_finish' },
+    { label: 'Top 20', markets: 'outrights', topFinish: 'top_20_finish' },
+    { label: 'Matchups', markets: 'h2h', isGolfMatchups: true },
   ]}],
   'Tennis': [{ key: 'tennis_atp_french_open', label: 'Tennis', inSeason: true, subs: [
     { label: 'All', markets: 'h2h' },
@@ -907,53 +907,48 @@ async function fetchOdds() {
   renderGames();
 }
 
-// ── GOLF: dynamically find active tournaments, fetch outrights ──
+// ── GOLF: Majors only (PGA Champ, US Open, The Open, Masters) ──
 async function fetchGolfOdds() {
   try {
     const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ODDS_KEY}`);
     if (!sportsRes.ok) return;
     const allSports = await sportsRes.json();
     const now = new Date();
+    // Only Majors have outrights in the Odds API
     const golfSports = allSports.filter(s => s.group === 'Golf' && s.active);
     if (!golfSports.length) {
-      document.getElementById('games-container').innerHTML = '<div class="empty">No active golf tournaments right now.</div>';
+      document.getElementById('games-container').innerHTML = '<div class="empty">No Major tournaments available right now.</div>';
       return;
     }
 
-    for (const sport of golfSports.slice(0, 8)) {
+    for (const sport of golfSports) {
       try {
-        // Use outrights market — works for both individual (PGA Champ) and team (Zurich) events
         const res = await fetch(
           `https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=outrights&oddsFormat=decimal&dateFormat=iso`
         );
         if (!res.ok) continue;
         const data = await res.json();
-        if (!data.length) continue;
+        if (!data.length || !data[0].bookmakers?.length) continue;
 
         const event = data[0];
-        if (!event.bookmakers?.length) continue;
-
         const gt = new Date(event.commence_time);
         const diffMins = (gt - now) / 60000;
-        // Include active (started within 5 days) or upcoming tournaments
-        if (diffMins < -5 * 24 * 60) continue;
+        if (diffMins < -7 * 24 * 60) continue; // skip if over a week past
+
         let timeStr;
         if (diffMins < 0) timeStr = 'LIVE';
         else if (gt.toDateString() === now.toDateString()) timeStr = 'Today';
         else if (gt.toDateString() === new Date(now.getTime()+86400000).toDateString()) timeStr = 'Tomorrow';
         else timeStr = gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
 
-        // Try DraftKings first, then FanDuel, then BetMGM, then any
         const bk = (event.bookmakers||[]).find(b => b.key==='draftkings')
           || (event.bookmakers||[]).find(b => b.key==='fanduel')
-          || (event.bookmakers||[]).find(b => b.key==='betmgm')
           || (event.bookmakers||[])[0];
         if (!bk) continue;
 
         const mkt = bk.markets?.find(m => m.key === 'outrights');
         if (!mkt?.outcomes?.length) continue;
 
-        // Sort by price ascending (lowest = biggest favorite = show first)
         const sorted = [...mkt.outcomes].sort((a,b) => a.price - b.price);
         sorted.forEach((player, idx) => {
           const amOdds = dec2am(player.price);
@@ -965,8 +960,7 @@ async function fetchGolfOdds() {
             isLive: diffMins < 0, time: timeStr,
             isGolf: true,
             tournamentTitle: sport.title || 'Golf',
-            playerName: player.name,
-            winOdds: amOdds,
+            playerName: player.name, winOdds: amOdds,
             isProp: false,
             ml: { home: amOdds, away: null },
             spread: { home:'', away:'', homeOdds:null, awayOdds:null },
@@ -976,81 +970,36 @@ async function fetchGolfOdds() {
       } catch(e) { console.warn('Golf fetch error', sport.key, e); }
     }
 
-    // If still nothing, show helpful message
     if (!allGames.length) {
-      document.getElementById('games-container').innerHTML =
-        '<div class="empty">No tournament winner odds available. Try Matchups tab for this week\'s pairings.</div>';
+      document.getElementById('games-container').innerHTML = `
+        <div style="padding:24px 16px;text-align:center;">
+          <div style="font-size:28px;margin-bottom:12px;">⛳</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px;">No Active Major Tournaments</div>
+          <div style="font-size:12px;color:var(--muted);max-width:300px;margin:0 auto;line-height:1.6;">
+            Golf betting is available for the four Majors:<br>
+            <strong style="color:var(--gold);">Masters · PGA Championship · US Open · The Open</strong><br><br>
+            Next up: <strong style="color:var(--text);">PGA Championship</strong> — Thu, May 14
+          </div>
+        </div>`;
     }
   } catch(e) { console.warn('Golf sports list error', e); }
 }
 
-// ── GOLF MATCHUPS: bulk h2h endpoint returns all round matchups at once ──
+// ── GOLF MATCHUPS: weekly PGA Tour matchups require a premium data provider ──
 async function fetchGolfMatchups() {
-  try {
-    const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ODDS_KEY}`);
-    if (!sportsRes.ok) return;
-    const allSports = await sportsRes.json();
-    const golfSports = allSports.filter(s => s.group === 'Golf' && s.active);
-    if (!golfSports.length) {
-      document.getElementById('games-container').innerHTML = '<div class="empty">No active golf tournaments for matchups.</div>';
-      return;
-    }
-    const now = new Date();
-    for (const sport of golfSports.slice(0, 4)) {
-      try {
-        // Bulk odds endpoint with h2h market — returns ALL matchup events for this tournament
-        const res = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal&dateFormat=iso`
-        );
-        if (!res.ok) continue;
-        const data = await res.json();
-        if (!data.length) continue;
-
-        // Include live + upcoming matchups (started within 12hrs)
-        const relevant = data.filter(g =>
-          new Date(g.commence_time) > new Date(now - 5*24*60*60*1000) // within 5 days past
-        );
-
-        relevant.forEach(game => {
-          const getMarket = (key) => {
-            for (const b of game.bookmakers||[]) {
-              const m = b.markets?.find(m => m.key===key);
-              if (m) return m;
-            }
-            return null;
-          };
-          const h2h = getMarket('h2h');
-          if (!h2h || h2h.outcomes?.length < 2) return;
-
-          const p1 = h2h.outcomes[0], p2 = h2h.outcomes[1];
-          const gt = new Date(game.commence_time);
-          const diffMins = (gt - now) / 60000;
-          const today = now.toDateString(), tmrw = new Date(now.getTime()+86400000).toDateString();
-          let timeStr;
-          if (diffMins < -60)                timeStr = 'LIVE';
-          else if (diffMins < 0)             timeStr = 'Starting Now';
-          else if (gt.toDateString()===today) timeStr = 'Today ' + gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
-          else if (gt.toDateString()===tmrw)  timeStr = 'Tomorrow ' + gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
-          else timeStr = gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-
-          allGames.push({
-            id: game.id,
-            sport: sport.title || 'Golf',
-            home: p2.name, away: p1.name,
-            isLive: diffMins < 0, time: timeStr, isProp: false,
-            ml:     { home: dec2am(p2.price), away: dec2am(p1.price) },
-            spread: { home:'N/A', away:'N/A', homeOdds:null, awayOdds:null },
-            ou:     { total:'N/A', over:null, under:null }
-          });
-        });
-      } catch(e) { console.warn('Golf matchups error', sport.key, e); }
-    }
-
-    if (!allGames.length) {
-      document.getElementById('games-container').innerHTML =
-        '<div class="empty">No matchup odds available yet. Check back closer to tee time.</div>';
-    }
-  } catch(e) { console.warn('Golf matchups sports error', e); }
+  document.getElementById('games-container').innerHTML = `
+    <div style="padding:24px 16px;text-align:center;">
+      <div style="font-size:28px;margin-bottom:12px;">⛳</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px;">Weekly Matchups Coming Soon</div>
+      <div style="font-size:12px;color:var(--muted);max-width:300px;margin:0 auto;line-height:1.6;">
+        Round-by-round player matchups for weekly PGA Tour events (like the Zurich Classic) 
+        require a premium golf data provider. This feature will be added in a future update.<br><br>
+        In the meantime, use <strong style="color:var(--gold);">To Win</strong> and 
+        <strong style="color:var(--gold);">Top 5/10/20</strong> for Major tournament betting 
+        — PGA Championship, US Open, The Open, and Masters.
+      </div>
+    </div>
+  `;
 }
 
 // ── OUTRIGHTS (futures) style — NFL SB winner, etc. ──
