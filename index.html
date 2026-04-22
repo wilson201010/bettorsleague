@@ -675,16 +675,16 @@ async function joinLeague() {
 async function fetchOdds() {
   document.getElementById('games-container').innerHTML = '<div class="loading">Loading live odds...</div>';
   allGames = [];
-  const sub = typeof currentSubSport === 'object' ? currentSubSport : null;
-  let keys, markets = 'h2h,spreads,totals';
+  const sub = (typeof currentSubSport === 'object') ? currentSubSport : {label:'All', markets:'h2h,spreads,totals'};
+  let keys, markets = sub.markets || 'h2h,spreads,totals';
 
   if (currentSport==='all') {
     keys = ALL_SPORT_KEYS;
+    markets = 'h2h,spreads,totals';
   } else {
     const baseKey = (SPORT_KEYS[currentSport]||[])[0]?.key;
     const altKey = sub?.altKey;
     keys = altKey ? [altKey] : (baseKey ? [baseKey] : ALL_SPORT_KEYS);
-    markets = sub?.markets || 'h2h,spreads,totals';
   }
 
   // Handle props - fetch event IDs first then get props per event
@@ -792,11 +792,19 @@ async function fetchOdds() {
 
 function renderSubSports() {
   const el = document.getElementById('sub-sport-tabs');
-  if (currentSport==='all') { el.innerHTML=''; el.style.display='none'; return; }
+  if (currentSport==='all') {
+    el.innerHTML=''; el.style.display='none';
+    currentSubSport = {label:'All', markets:'h2h,spreads,totals'};
+    return;
+  }
   const sportData = SPORT_KEYS[currentSport];
-  if (!sportData?.[0]?.subs) { el.innerHTML=''; el.style.display='none'; return; }
-  el.style.display='flex';
+  if (!sportData?.[0]?.subs) {
+    el.innerHTML=''; el.style.display='none';
+    currentSubSport = {label:'All', markets:'h2h,spreads,totals'};
+    return;
+  }
   currentSubSport = sportData[0].subs[0];
+  el.style.display='flex';
   el.innerHTML = sportData[0].subs.map((s,i) =>
     `<button class="sub-pill${i===0?' active':''}" onclick="setSubSport(${i},this)">${s.label}</button>`
   ).join('');
@@ -812,9 +820,9 @@ function setSubSport(idx, btn) {
 
 function setSport(sport, btn) {
   currentSport = sport;
-  currentSubSport = 'all';
   document.querySelectorAll('.sport-pill').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
+  // renderSubSports sets currentSubSport to first sub before fetchOdds runs
   renderSubSports();
   fetchOdds();
 }
