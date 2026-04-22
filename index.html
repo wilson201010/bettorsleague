@@ -472,6 +472,9 @@ const SUPABASE_URL = 'https://fexbrsplfongvardrarb.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZleGJyc3BsZm9uZ3ZhcmRyYXJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxODUzNzgsImV4cCI6MjA5MTc2MTM3OH0.K9umByuKZn4BxgKSyfoZI_Q2CeS2I1b3WmdNuQco9QA';
 const ODDS_KEY = '8320dd8ef90400c2e6584b24325f66fd';
 
+if (typeof supabase === 'undefined') {
+  document.getElementById('login-err').textContent = 'Failed to load auth library. Please refresh.';
+}
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -596,9 +599,30 @@ async function signIn() {
   const email = document.getElementById('login-email').value.trim();
   const pw = document.getElementById('login-pw').value;
   const err = document.getElementById('login-err');
+  const btn = document.querySelector('#form-login .auth-btn');
+
   err.textContent = '';
-  const {error} = await db.auth.signInWithPassword({email,password:pw});
-  if (error) { err.textContent=error.message; }
+  if (!email || !pw) { err.textContent = 'Email and password required.'; return; }
+
+  btn.textContent = 'SIGNING IN...';
+  btn.disabled = true;
+
+  try {
+    const { data, error } = await db.auth.signInWithPassword({ email, password: pw });
+    console.log('signIn result:', { data, error });
+    if (error) {
+      err.textContent = error.message;
+    } else if (!data?.user) {
+      err.textContent = 'Sign in failed. Please try again.';
+    }
+    // Success: onAuthStateChange will fire and handle navigation
+  } catch(e) {
+    console.error('signIn exception:', e);
+    err.textContent = 'Connection error: ' + e.message;
+  } finally {
+    btn.textContent = 'SIGN IN';
+    btn.disabled = false;
+  }
 }
 
 async function signOut() {
@@ -609,15 +633,20 @@ async function signOut() {
 }
 
 db.auth.onAuthStateChange(async (event, session) => {
-  if (session?.user) {
+  console.log('Auth state change:', event, session?.user?.email);
+  if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session?.user)) {
     currentUser = session.user;
-    document.getElementById('auth-screen').style.display='none';
+    document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-screen').classList.add('visible');
     const cached = localStorage.getItem('bl_user');
-    if (cached) document.getElementById('header-user').textContent = 'Hey, '+cached;
+    if (cached) document.getElementById('header-user').textContent = 'Hey, ' + cached;
     await loadProfile();
     await loadDashboard();
     initSportPills();
+  } else if (event === 'SIGNED_OUT') {
+    currentUser = null;
+    document.getElementById('auth-screen').style.display = 'flex';
+    document.getElementById('app-screen').classList.remove('visible');
   }
 });
 
