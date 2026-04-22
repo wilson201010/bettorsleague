@@ -674,10 +674,10 @@ async function joinLeague() {
 // ── ODDS + GAMES ──
 async function fetchOdds() {
   document.getElementById('games-container').innerHTML = '<div class="loading">Loading live odds...</div>';
-  console.log('fetchOdds called - sport:', currentSport, 'sub:', currentSubSport, 'keys:', keys, 'markets:', markets);
   allGames = [];
   const sub = (typeof currentSubSport === 'object') ? currentSubSport : {label:'All', markets:'h2h,spreads,totals'};
   let keys, markets = sub.markets || 'h2h,spreads,totals';
+  console.log('fetchOdds called - sport:', currentSport, 'sub:', sub?.label);
 
   if (currentSport==='all') {
     keys = ALL_SPORT_KEYS;
