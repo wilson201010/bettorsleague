@@ -37,11 +37,16 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
   .sport-scroll { padding: 8px 8px; }
   .sub-sport-scroll { padding: 4px 8px; }
   .page-pad { padding: 12px 16px; }
-  #games-container, #open-bets, #settled-bets, #dash-leagues-list, #leagues-list { max-width: 820px; margin: 0 auto; }
-  .stat-grid { max-width: 820px; margin: 0 auto 12px; gap: 10px; }
-  .sec-title { max-width: 820px; margin: 0 auto; padding: 8px 0 5px; }
-  .slip-bar { max-width: 820px; margin: 0 auto; }
-  .action-btn { max-width: 792px; }
+  /* Constrain all main content to center column */
+  #games-container, #open-bets, #settled-bets, #dash-leagues-list, #leagues-list,
+  #panel-leagues .action-btn, #panel-leagues .sec-title,
+  #league-tab-leaderboard, #league-tab-activity, #league-tab-invite {
+    max-width: 680px; margin-left: auto; margin-right: auto;
+  }
+  .stat-grid { max-width: 680px; margin: 0 auto 12px; gap: 10px; }
+  .sec-title { max-width: 680px; margin: 0 auto; padding: 8px 0 5px; }
+  .slip-bar { max-width: 680px; margin: 0 auto; }
+  .action-btn { max-width: 652px; margin-left: auto; margin-right: auto; display: block; width: calc(100% - 28px); }
   /* Denser game rows on desktop */
   .team-row { padding: 5px 12px; }
   .game-group-header { padding: 4px 12px; }
@@ -55,6 +60,9 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
   .stat-val { font-size: 24px; }
   .slip-bar { padding: 8px 14px; }
   .league-card { padding: 10px 12px; }
+  /* League detail */
+  #panel-league-detail .app-nav { max-width: 680px; margin: 0 auto; }
+  .league-detail-header { max-width: 680px; margin: 0 auto; }
 }
 
 /* ── AUTH ── */
@@ -213,6 +221,11 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
 .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; align-items: flex-end; justify-content: center; }
 .modal-overlay.open { display: flex; }
 .modal { background: var(--surface); border-radius: 16px 16px 0 0; padding: 20px; width: 100%; max-height: 92vh; overflow-y: auto; }
+@media (min-width: 600px) {
+  .modal-overlay { align-items: center; }
+  .modal { border-radius: 16px; width: 100%; max-width: 480px; max-height: 88vh; }
+  .modal-handle { display: none; }
+}
 .modal-handle { width: 36px; height: 4px; background: var(--border2); border-radius: 2px; margin: 0 auto 16px; }
 .modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 24px; color: var(--gold); letter-spacing: 1px; margin-bottom: 16px; }
 .form-row { margin-bottom: 12px; }
@@ -828,25 +841,67 @@ async function createLeague() {
   const bet_types = document.getElementById('lg-bettypes').value;
   const sports = Array.from(document.querySelectorAll('.sport-chk input:checked')).map(el=>el.value);
   if (!name) { showToast('Enter a league name!',true); return; }
-  if (!pw) { showToast('Enter a password!',true); return; }
+  if (!pw)   { showToast('Enter a password!',true); return; }
   if (!sports.length) { showToast('Select at least one sport!',true); return; }
+
   let bankroll=1000, week_start=null, week_end=null;
   if (leagueType==='season') {
     bankroll = parseFloat(document.getElementById('lg-bankroll').value)||5000;
     week_start = document.getElementById('lg-start').value||null;
-    week_end = document.getElementById('lg-end').value||null;
+    week_end   = document.getElementById('lg-end').value||null;
     if (!week_start||!week_end) { showToast('Set start and end dates!',true); return; }
   }
-  const {data:league, error} = await db.from('leagues').insert({
-    name, buy_in, bankroll, payout_structure, password:pw, icon,
-    league_type:leagueType, buyin_schedule, bet_types,
-    sports_allowed:sports.join(','), week_start, week_end, created_by:currentUser.id
-  }).select().single();
-  if (error) { showToast('Error: '+error.message, true); return; }
-  await db.from('league_members').insert({league_id:league.id, user_id:currentUser.id, balance:bankroll});
-  closeModal('create-modal');
-  await loadLeagues();
-  showToast('Created! Group: '+name+' · PW: '+pw);
+
+  // Disable button to show progress
+  const btn = document.querySelector('#create-modal .btn-confirm');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+
+  try {
+    const insertPayload = {
+      name, buy_in, bankroll, payout_structure, password: pw, icon,
+      league_type: leagueType, buyin_schedule, bet_types,
+      sports_allowed: sports.join(','), week_start, week_end,
+      created_by: currentUser.id
+    };
+    console.log('Creating league:', insertPayload);
+
+    const { data: league, error } = await db
+      .from('leagues')
+      .insert(insertPayload)
+      .select()
+      .single();
+
+    console.log('Create league result:', { league, error });
+
+    if (error) {
+      showToast('Error: ' + error.message, true);
+      console.error('League create error:', error);
+      return;
+    }
+    if (!league) {
+      showToast('League created but could not retrieve it. Try refreshing.', true);
+      return;
+    }
+
+    const { error: memberError } = await db
+      .from('league_members')
+      .insert({ league_id: league.id, user_id: currentUser.id, balance: bankroll });
+
+    if (memberError) {
+      console.error('Member insert error:', memberError);
+      showToast('League created but could not add you as member: ' + memberError.message, true);
+      return;
+    }
+
+    closeModal('create-modal');
+    await loadLeagues();
+    showToast('🏆 ' + name + ' created! Password: ' + pw);
+  } catch(e) {
+    console.error('createLeague exception:', e);
+    showToast('Unexpected error: ' + e.message, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Create League'; }
+  }
 }
 
 async function joinLeague() {
