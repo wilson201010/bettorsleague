@@ -919,77 +919,54 @@ async function fetchGolfOdds() {
       document.getElementById('games-container').innerHTML = '<div class="empty">No active golf tournaments right now.</div>';
       return;
     }
-    for (const sport of golfSports.slice(0, 6)) {
+
+    for (const sport of golfSports.slice(0, 8)) {
       try {
-        // Try outrights first (individual player winner)
-        const res = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=outrights&oddsFormat=decimal&dateFormat=iso`);
+        // Use outrights market — works for both individual (PGA Champ) and team (Zurich) events
+        const res = await fetch(
+          `https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=outrights&oddsFormat=decimal&dateFormat=iso`
+        );
         if (!res.ok) continue;
         const data = await res.json();
-
-        // If no outright data, try h2h (team format events like Zurich Classic)
-        if (!data.length || !data[0].bookmakers?.length) {
-          const h2hRes = await fetch(`https://api.the-odds-api.com/v4/sports/${sport.key}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal&dateFormat=iso`);
-          if (!h2hRes.ok) continue;
-          const h2hData = await h2hRes.json();
-          if (!h2hData.length) continue;
-          // For team format: collect all unique teams and their odds to win
-          const teamOdds = {};
-          h2hData.forEach(game => {
-            (game.bookmakers||[]).slice(0,1).forEach(bk => {
-              (bk.markets||[]).filter(m=>m.key==='h2h').forEach(mkt => {
-                (mkt.outcomes||[]).forEach(o => {
-                  if (!teamOdds[o.name] || o.price < teamOdds[o.name]) {
-                    teamOdds[o.name] = o.price; // best (lowest) odds = favorite
-                  }
-                });
-              });
-            });
-          });
-          const sorted = Object.entries(teamOdds).sort((a,b) => a[1]-b[1]);
-          const gt = new Date(h2hData[0].commence_time);
-          const diffMins = (gt - now) / 60000;
-          const timeStr = diffMins < 0 ? 'LIVE' :
-            gt.toDateString()===now.toDateString() ? 'Today' :
-            gt.toDateString()===new Date(now.getTime()+86400000).toDateString() ? 'Tomorrow' :
-            gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-          sorted.forEach(([team, price], idx) => {
-            const amOdds = dec2am(price);
-            if (!amOdds) return;
-            allGames.push({
-              id: sport.key+'_team_'+idx, sport: sport.title||'Golf',
-              home: team, away: '',
-              isLive: diffMins < 0, time: timeStr,
-              isGolf: true, tournamentTitle: sport.title||'Golf', playerName: team, winOdds: amOdds,
-              isProp: false,
-              ml: { home: amOdds, away: null },
-              spread: { home:'', away:'', homeOdds:null, awayOdds:null },
-              ou: { total:'', over:null, under:null }
-            });
-          });
-          continue;
-        }
+        if (!data.length) continue;
 
         const event = data[0];
+        if (!event.bookmakers?.length) continue;
+
         const gt = new Date(event.commence_time);
         const diffMins = (gt - now) / 60000;
+        // Include active (started within 5 days) or upcoming tournaments
+        if (diffMins < -5 * 24 * 60) continue;
         let timeStr;
         if (diffMins < 0) timeStr = 'LIVE';
         else if (gt.toDateString() === now.toDateString()) timeStr = 'Today';
         else if (gt.toDateString() === new Date(now.getTime()+86400000).toDateString()) timeStr = 'Tomorrow';
         else timeStr = gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-        const bk = (event.bookmakers||[]).find(b => b.key==='draftkings') || (event.bookmakers||[])[0];
+
+        // Try DraftKings first, then FanDuel, then BetMGM, then any
+        const bk = (event.bookmakers||[]).find(b => b.key==='draftkings')
+          || (event.bookmakers||[]).find(b => b.key==='fanduel')
+          || (event.bookmakers||[]).find(b => b.key==='betmgm')
+          || (event.bookmakers||[])[0];
         if (!bk) continue;
+
         const mkt = bk.markets?.find(m => m.key === 'outrights');
-        if (!mkt) continue;
-        const sorted = [...(mkt.outcomes||[])].sort((a,b) => a.price - b.price);
+        if (!mkt?.outcomes?.length) continue;
+
+        // Sort by price ascending (lowest = biggest favorite = show first)
+        const sorted = [...mkt.outcomes].sort((a,b) => a.price - b.price);
         sorted.forEach((player, idx) => {
           const amOdds = dec2am(player.price);
           if (!amOdds) return;
           allGames.push({
-            id: event.id+'_'+idx, sport: sport.title||'Golf',
+            id: event.id + '_' + idx,
+            sport: sport.title || 'Golf',
             home: player.name, away: '',
             isLive: diffMins < 0, time: timeStr,
-            isGolf: true, tournamentTitle: sport.title||'Golf', playerName: player.name, winOdds: amOdds,
+            isGolf: true,
+            tournamentTitle: sport.title || 'Golf',
+            playerName: player.name,
+            winOdds: amOdds,
             isProp: false,
             ml: { home: amOdds, away: null },
             spread: { home:'', away:'', homeOdds:null, awayOdds:null },
@@ -997,6 +974,12 @@ async function fetchGolfOdds() {
           });
         });
       } catch(e) { console.warn('Golf fetch error', sport.key, e); }
+    }
+
+    // If still nothing, show helpful message
+    if (!allGames.length) {
+      document.getElementById('games-container').innerHTML =
+        '<div class="empty">No tournament winner odds available. Try Matchups tab for this week\'s pairings.</div>';
     }
   } catch(e) { console.warn('Golf sports list error', e); }
 }
@@ -1025,7 +1008,7 @@ async function fetchGolfMatchups() {
 
         // Include live + upcoming matchups (started within 12hrs)
         const relevant = data.filter(g =>
-          new Date(g.commence_time) > new Date(now - 12*60*60*1000)
+          new Date(g.commence_time) > new Date(now - 5*24*60*60*1000) // within 5 days past
         );
 
         relevant.forEach(game => {
