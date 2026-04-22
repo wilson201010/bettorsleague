@@ -752,15 +752,12 @@ async function fetchOdds() {
       if (!res.ok) continue;
       const data = await res.json();
       const now = new Date();
-      const sub = typeof currentSubSport === "object" ? currentSubSport : null;
-          data.filter(g => sub?.liveOnly ? new Date(g.commence_time) <= now : new Date(g.commence_time) > new Date(now - 3*60*60*1000))
+      data.filter(g => sub?.liveOnly ? new Date(g.commence_time) <= now : new Date(g.commence_time) > new Date(now - 3*60*60*1000))
         .slice(0,15)
         .forEach(game => {
           const getMarket = (key) => { for (const b of game.bookmakers||[]) { const m=b.markets?.find(m=>m.key===key); if(m) return m; } return null; };
           const h2h=getMarket('h2h'), spread=getMarket('spreads'), total=getMarket('totals');
-          // For props markets, use first available market as h2h fallback
-          const firstMarket = game.bookmakers?.[0]?.markets?.[0];
-          if (!h2h && !firstMarket) return;
+          if (!h2h) return;
           const homeH2H=h2h.outcomes?.find(o=>o.name===game.home_team);
           const awayH2H=h2h.outcomes?.find(o=>o.name===game.away_team);
           const homeSprd=spread?.outcomes?.find(o=>o.name===game.home_team);
