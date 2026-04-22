@@ -236,7 +236,48 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
 .type-btn.active { border: 2px solid var(--gold); background: var(--gold-dim); color: var(--gold); }
 .type-desc { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
-/* ── COLLAPSIBLE GROUPS ── */
+/* ── LEAGUE DETAIL ── */
+.league-detail-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px; display: flex; align-items: center; gap: 12px; }
+.league-detail-back { background: none; border: none; color: var(--gold); font-size: 18px; cursor: pointer; padding: 0 6px 0 0; flex-shrink: 0; }
+.league-detail-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--gold-dim); display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+.league-detail-info { flex: 1; min-width: 0; }
+.league-detail-name { font-family: 'Bebas Neue', sans-serif; font-size: 20px; color: var(--gold); letter-spacing: 1px; }
+.league-detail-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.league-tab { display: none; }
+.league-tab.active { display: block; }
+/* Leaderboard */
+.leaderboard-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.lb-rank { font-family: 'Bebas Neue', sans-serif; font-size: 22px; width: 28px; text-align: center; flex-shrink: 0; }
+.lb-rank.gold   { color: #FFD700; }
+.lb-rank.silver { color: #C0C0C0; }
+.lb-rank.bronze { color: #CD7F32; }
+.lb-rank.other  { color: var(--muted); font-size: 16px; }
+.lb-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: var(--gold); flex-shrink: 0; }
+.lb-info { flex: 1; min-width: 0; }
+.lb-name { font-size: 14px; font-weight: 600; }
+.lb-record { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.lb-bal { text-align: right; }
+.lb-bal-amt { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--gold); }
+.lb-bal-change { font-size: 11px; margin-top: 1px; }
+.lb-me { background: var(--gold-dim); }
+/* Activity feed */
+.activity-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.activity-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--gold); flex-shrink: 0; margin-top: 2px; }
+.activity-content { flex: 1; min-width: 0; }
+.activity-text { font-size: 12px; line-height: 1.4; }
+.activity-time { font-size: 10px; color: var(--muted); margin-top: 3px; }
+.activity-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; margin-left: 4px; }
+.activity-badge.won  { background: rgba(34,197,94,0.15); color: var(--green); }
+.activity-badge.lost { background: rgba(239,68,68,0.15);  color: var(--red); }
+.activity-badge.pending { background: var(--gold-dim); color: var(--gold); }
+/* Invite */
+.invite-box { margin: 16px 14px; background: var(--surface2); border: 1px solid var(--border2); border-radius: 12px; padding: 16px; }
+.invite-code { font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 4px; color: var(--gold); text-align: center; padding: 12px; background: var(--dark); border-radius: 8px; margin: 10px 0; }
+.invite-copy-btn { width: 100%; background: var(--gold); border: none; border-radius: 8px; color: #0a0d13; font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px; padding: 12px; cursor: pointer; }
+/* Grade badge on bet rows */
+.grade-btn { background: var(--surface2); border: 1px solid var(--border2); border-radius: 4px; color: var(--muted2); font-size: 10px; padding: 2px 7px; cursor: pointer; flex-shrink: 0; }
+.grade-btn:hover { border-color: var(--gold); color: var(--gold); }
+
 .collapsible-header { cursor: pointer; user-select: none; }
 .collapsible-header:active { background: var(--surface3); }
 .collapse-arrow { font-size: 11px; color: var(--muted); transition: transform 0.2s; display: inline-block; margin-left: 6px; }
@@ -365,6 +406,19 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
       <button class="action-btn secondary" onclick="openModal('join-modal')">Join Existing League</button>
       <div class="sec-title" style="margin-top:6px;">Your Leagues</div>
       <div id="leagues-list"><div class="loading">Loading...</div></div>
+    </div>
+
+    <!-- LEAGUE DETAIL -->
+    <div class="panel" id="panel-league-detail">
+      <div class="league-detail-header" id="league-detail-header"></div>
+      <div class="app-nav" style="border-top:none;">
+        <button class="nav-btn active" onclick="switchLeagueTab('leaderboard',this)">Leaderboard</button>
+        <button class="nav-btn" onclick="switchLeagueTab('activity',this)">Activity</button>
+        <button class="nav-btn" onclick="switchLeagueTab('invite',this)">Invite</button>
+      </div>
+      <div id="league-tab-leaderboard" class="league-tab active"></div>
+      <div id="league-tab-activity" class="league-tab"></div>
+      <div id="league-tab-invite" class="league-tab"></div>
     </div>
 
   </div>
@@ -650,6 +704,16 @@ db.auth.onAuthStateChange(async (event, session) => {
     await loadProfile();
     await loadDashboard();
     initSportPills();
+    autoGradeBets(); // grade any pending bets silently
+    // Handle invite deep-link: ?join=LeagueName&pw=password
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('join') && urlParams.get('pw')) {
+      document.getElementById('join-name').value = urlParams.get('join');
+      document.getElementById('join-pw').value   = urlParams.get('pw');
+      openModal('join-modal');
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   } else if (event === 'SIGNED_OUT') {
     currentUser = null;
     document.getElementById('auth-screen').style.display = 'flex';
@@ -690,15 +754,15 @@ function renderDashLeagues() {
   const el = document.getElementById('dash-leagues-list');
   if (!userLeagues.length) { el.innerHTML='<div class="empty">No leagues yet. Go to Leagues tab to create one!</div>'; return; }
   el.innerHTML = userLeagues.map(l => `
-    <div class="league-card">
-      <div class="league-icon">${l.leagues.icon||'🏆'}</div>
+    <div class="league-card" onclick="openLeague('${l.league_id}')">
+      <div class="league-icon">${escHtml(l.leagues.icon||'🏆')}</div>
       <div class="league-info">
-        <div class="league-name">${l.leagues.name}</div>
-        <div class="league-meta">$${l.leagues.buy_in} buy-in · ${l.leagues.payout_structure}</div>
+        <div class="league-name">${escHtml(l.leagues.name)}</div>
+        <div class="league-meta">$${l.leagues.buy_in} buy-in · ${escHtml(l.leagues.payout_structure)}</div>
       </div>
       <div class="league-bal">
         <div class="amt">$${parseFloat(l.balance).toFixed(2)}</div>
-        <div class="lbl">balance</div>
+        <div class="lbl">balance ›</div>
       </div>
     </div>
   `).join('');
@@ -717,15 +781,15 @@ function renderLeagues() {
   const el = document.getElementById('leagues-list');
   if (!userLeagues.length) { el.innerHTML='<div class="empty">No leagues yet.</div>'; return; }
   el.innerHTML = userLeagues.map(l => `
-    <div class="league-card">
-      <div class="league-icon">${l.leagues.icon||'🏆'}</div>
+    <div class="league-card" onclick="openLeague('${l.league_id}')">
+      <div class="league-icon">${escHtml(l.leagues.icon||'🏆')}</div>
       <div class="league-info">
-        <div class="league-name">${l.leagues.name}</div>
-        <div class="league-meta">$${l.leagues.buy_in} buy-in · $${l.leagues.bankroll||1000} bankroll · ${l.leagues.payout_structure}</div>
+        <div class="league-name">${escHtml(l.leagues.name)}</div>
+        <div class="league-meta">$${l.leagues.buy_in} buy-in · $${l.leagues.bankroll||1000} bankroll · ${escHtml(l.leagues.payout_structure)}</div>
       </div>
       <div class="league-bal">
         <div class="amt">$${parseFloat(l.balance).toFixed(2)}</div>
-        <div class="lbl">your balance</div>
+        <div class="lbl">your balance ›</div>
       </div>
     </div>
   `).join('');
@@ -1693,9 +1757,341 @@ async function loadMyBets() {
   `).join('') : '<div class="empty">No settled bets this week.</div>';
 }
 
+// ── SCORES API SPORT KEY MAP ──
+const SCORES_SPORT_MAP = {
+  'NBA': 'basketball_nba', 'MLB': 'baseball_mlb', 'NHL': 'icehockey_nhl',
+  'NFL': 'americanfootball_nfl', 'NCAAB': 'basketball_ncaab',
+  'Soccer': 'soccer_epl', 'MMA': 'mma_mixed_martial_arts',
+};
+
+// ── LEAGUE DETAIL ──
+let currentLeague = null;
+
+function openLeague(leagueId) {
+  const member = userLeagues.find(l => l.league_id === leagueId);
+  if (!member) return;
+  currentLeague = member;
+  // Render header
+  const lg = member.leagues;
+  document.getElementById('league-detail-header').innerHTML = `
+    <button class="league-detail-back" onclick="closeLeague()">‹</button>
+    <div class="league-detail-icon">${escHtml(lg.icon||'🏆')}</div>
+    <div class="league-detail-info">
+      <div class="league-detail-name">${escHtml(lg.name)}</div>
+      <div class="league-detail-meta">$${lg.buy_in} buy-in · ${lg.payout_structure} · ${lg.league_type||'weekly'}</div>
+    </div>
+  `;
+  // Show detail panel
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-league-detail').classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  // Reset league sub-tabs
+  document.querySelectorAll('#panel-league-detail .nav-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+  document.querySelectorAll('.league-tab').forEach((t,i) => t.classList.toggle('active', i===0));
+  loadLeaderboard(leagueId);
+}
+
+function closeLeague() {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-leagues').classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.nav-btn[onclick*="leagues"]').classList.add('active');
+  currentLeague = null;
+}
+
+function switchLeagueTab(tab, btn) {
+  document.querySelectorAll('#panel-league-detail .nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.league-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('league-tab-' + tab).classList.add('active');
+  const lid = currentLeague?.league_id;
+  if (!lid) return;
+  if (tab === 'leaderboard') loadLeaderboard(lid);
+  if (tab === 'activity')    loadActivity(lid);
+  if (tab === 'invite')      renderInvite();
+}
+
+// ── LEADERBOARD ──
+async function loadLeaderboard(leagueId) {
+  const el = document.getElementById('league-tab-leaderboard');
+  el.innerHTML = '<div class="loading">Loading standings...</div>';
+  try {
+    // Get all members with their profiles
+    const { data: members } = await db
+      .from('league_members')
+      .select('*, profiles(username)')
+      .eq('league_id', leagueId)
+      .order('balance', { ascending: false });
+
+    if (!members?.length) { el.innerHTML = '<div class="empty">No members yet.</div>'; return; }
+
+    // Get bet stats per user for this league
+    const { data: bets } = await db
+      .from('bets')
+      .select('user_id, status, wager, potential_win, result')
+      .eq('league_id', leagueId);
+
+    const betsByUser = {};
+    (bets||[]).forEach(b => {
+      if (!betsByUser[b.user_id]) betsByUser[b.user_id] = { won:0, lost:0, pending:0, profit:0 };
+      const s = betsByUser[b.user_id];
+      if (b.status === 'won')     { s.won++;     s.profit += parseFloat(b.result||0); }
+      else if (b.status === 'lost') { s.lost++;  s.profit -= parseFloat(b.wager||0); }
+      else                          s.pending++;
+    });
+
+    const startBal = parseFloat(currentLeague?.leagues?.bankroll || 1000);
+    const rankColors = ['gold','silver','bronze'];
+
+    el.innerHTML = members.map((m, i) => {
+      const stats = betsByUser[m.user_id] || { won:0, lost:0, pending:0, profit:0 };
+      const bal = parseFloat(m.balance);
+      const change = bal - startBal;
+      const isMe = m.user_id === currentUser.id;
+      const username = m.profiles?.username || 'Player';
+      const initial = username[0].toUpperCase();
+      return `
+        <div class="leaderboard-row${isMe ? ' lb-me' : ''}">
+          <div class="lb-rank ${rankColors[i] || 'other'}">${i+1}</div>
+          <div class="lb-avatar">${initial}</div>
+          <div class="lb-info">
+            <div class="lb-name">${escHtml(username)}${isMe ? ' <span style="font-size:10px;color:var(--muted)">(you)</span>' : ''}</div>
+            <div class="lb-record">${stats.won}W–${stats.lost}L · ${stats.pending} pending</div>
+          </div>
+          <div class="lb-bal">
+            <div class="lb-bal-amt">$${bal.toFixed(0)}</div>
+            <div class="lb-bal-change ${change >= 0 ? 'positive' : 'negative'}">${change >= 0 ? '+' : ''}$${change.toFixed(0)}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    console.error('loadLeaderboard error:', e);
+    el.innerHTML = '<div class="empty">Could not load standings.</div>';
+  }
+}
+
+// ── ACTIVITY FEED ──
+async function loadActivity(leagueId) {
+  const el = document.getElementById('league-tab-activity');
+  el.innerHTML = '<div class="loading">Loading activity...</div>';
+  try {
+    const { data: bets } = await db
+      .from('bets')
+      .select('*, profiles(username)')
+      .eq('league_id', leagueId)
+      .order('placed_at', { ascending: false })
+      .limit(50);
+
+    if (!bets?.length) { el.innerHTML = '<div class="empty">No bets placed yet.</div>'; return; }
+
+    el.innerHTML = bets.map(b => {
+      const username = b.profiles?.username || 'Player';
+      const initial = username[0].toUpperCase();
+      const timeAgo = formatTimeAgo(b.placed_at);
+      const isMe = b.user_id === currentUser.id;
+      const resultText = b.status === 'won'
+        ? `+$${parseFloat(b.potential_win||0).toFixed(2)}`
+        : b.status === 'lost'
+        ? `-$${parseFloat(b.wager||0).toFixed(2)}`
+        : `$${parseFloat(b.wager||0).toFixed(2)} wagered`;
+      return `
+        <div class="activity-row">
+          <div class="activity-avatar">${initial}</div>
+          <div class="activity-content">
+            <div class="activity-text">
+              <strong>${escHtml(isMe ? 'You' : username)}</strong> bet
+              <strong>${escHtml(b.pick)}</strong>
+              <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
+              <span class="activity-badge ${b.status}">${b.status}</span>
+            </div>
+            <div class="activity-time">${escHtml(b.sport)} · ${resultText} · ${timeAgo}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="empty">Could not load activity.</div>';
+  }
+}
+
+// ── INVITE ──
+function renderInvite() {
+  if (!currentLeague) return;
+  const lg = currentLeague.leagues;
+  const el = document.getElementById('league-tab-invite');
+  const shareUrl = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(lg.name)}&pw=${encodeURIComponent(lg.password)}`;
+  el.innerHTML = `
+    <div class="invite-box">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">League Name</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:12px;">${escHtml(lg.name)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Password</div>
+      <div class="invite-code">${escHtml(lg.password)}</div>
+      <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:12px;">Share the league name + password with friends</div>
+      <button class="invite-copy-btn" onclick="copyInvite('${escAttr(lg.name)}','${escAttr(lg.password)}','${escAttr(shareUrl)}')">
+        📋 Copy Invite Link
+      </button>
+    </div>
+    <div style="padding:0 14px;">
+      <div class="sec-title" style="padding:10px 0 6px;">How to Join</div>
+      <div style="font-size:12px;color:var(--muted2);line-height:1.8;padding:8px 0;">
+        1. Go to <strong style="color:var(--text);">bettorsleague.com</strong><br>
+        2. Create an account<br>
+        3. Tap <strong style="color:var(--text);">Leagues → Join Existing League</strong><br>
+        4. Enter name: <strong style="color:var(--gold);">${escHtml(lg.name)}</strong><br>
+        5. Enter password: <strong style="color:var(--gold);">${escHtml(lg.password)}</strong>
+      </div>
+    </div>
+  `;
+}
+
+async function copyInvite(name, pw, url) {
+  const text = `Join my BettorsLeague!\n\nLeague: ${name}\nPassword: ${pw}\n\n${url}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Invite copied! 📋');
+  } catch(e) {
+    showToast('Link: ' + url);
+  }
+}
+
+// ── AUTO-GRADING ──
+// Runs on load + after bets placed. Checks completed games and grades pending bets.
+async function autoGradeBets() {
+  if (!currentUser) return;
+  try {
+    // Get all pending bets for this user
+    const { data: pendingBets } = await db
+      .from('bets')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .eq('status', 'pending');
+
+    if (!pendingBets?.length) return;
+
+    // Group by sport to minimize API calls
+    const bySport = {};
+    pendingBets.forEach(b => {
+      if (!bySport[b.sport]) bySport[b.sport] = [];
+      bySport[b.sport].push(b);
+    });
+
+    for (const [sport, bets] of Object.entries(bySport)) {
+      const sportKey = SCORES_SPORT_MAP[sport];
+      if (!sportKey) continue;
+      try {
+        // Fetch completed scores for last 3 days
+        const res = await fetch(
+          `https://api.the-odds-api.com/v4/sports/${sportKey}/scores/?apiKey=${ODDS_KEY}&daysFrom=3&dateFormat=iso`
+        );
+        if (!res.ok) continue;
+        const scores = await res.json();
+        const completed = scores.filter(g => g.completed);
+
+        for (const bet of bets) {
+          const game = completed.find(g => g.id === bet.game_id);
+          if (!game) continue; // game not finished yet
+
+          const result = gradebet(bet, game);
+          if (result === null) continue; // can't determine yet
+
+          const won = result === 'won';
+          const profit = won ? parseFloat(bet.potential_win) : -parseFloat(bet.wager);
+
+          // Update bet status
+          await db.from('bets')
+            .update({ status: result, result: profit })
+            .eq('id', bet.id);
+
+          // Update balance
+          if (won) {
+            const { data: member } = await db
+              .from('league_members')
+              .select('balance')
+              .eq('league_id', bet.league_id)
+              .eq('user_id', currentUser.id)
+              .single();
+            if (member) {
+              const newBal = parseFloat(member.balance) + parseFloat(bet.potential_win) + parseFloat(bet.wager);
+              await db.from('league_members')
+                .update({ balance: newBal })
+                .eq('league_id', bet.league_id)
+                .eq('user_id', currentUser.id);
+            }
+          }
+        }
+      } catch(e) { console.warn('Grade error for', sport, e); }
+    }
+    // Refresh UI after grading
+    await loadLeagues();
+    await loadMyBets();
+  } catch(e) { console.warn('autoGradeBets error:', e); }
+}
+
+// Determine if a bet won or lost based on final scores
+function gradebet(bet, game) {
+  const homeScore = game.scores?.find(s => s.name === game.home_team)?.score;
+  const awayScore = game.scores?.find(s => s.name === game.away_team)?.score;
+  if (homeScore == null || awayScore == null) return null;
+
+  const home = parseFloat(homeScore), away = parseFloat(awayScore);
+  const pick = (bet.pick || '').toLowerCase();
+
+  // Moneyline: "Team Name ML"
+  if (pick.includes(' ml')) {
+    const team = pick.replace(' ml', '').trim();
+    const homeWin = home > away;
+    const awayWin = away > home;
+    if (game.home_team.toLowerCase().includes(team)) return homeWin ? 'won' : 'lost';
+    if (game.away_team.toLowerCase().includes(team)) return awayWin ? 'won' : 'lost';
+    return null;
+  }
+
+  // Spread: "Team Name +X.X" or "Team Name -X.X"
+  const spreadMatch = pick.match(/^(.+?)\s([+-]\d+\.?\d*)(?:\s|$)/);
+  if (spreadMatch && !pick.includes('over') && !pick.includes('under')) {
+    const team = spreadMatch[1].trim();
+    const spread = parseFloat(spreadMatch[2]);
+    const isHome = game.home_team.toLowerCase().includes(team);
+    const isAway = game.away_team.toLowerCase().includes(team);
+    if (!isHome && !isAway) return null;
+    const teamScore = isHome ? home : away;
+    const oppScore  = isHome ? away : home;
+    const covered = (teamScore + spread) > oppScore;
+    const push    = (teamScore + spread) === oppScore;
+    if (push) return 'push';
+    return covered ? 'won' : 'lost';
+  }
+
+  // Over/Under: "Over X.X" or "Under X.X"
+  const ouMatch = pick.match(/^(over|under)\s(\d+\.?\d*)/i);
+  if (ouMatch) {
+    const dir   = ouMatch[1].toLowerCase();
+    const total = parseFloat(ouMatch[2]);
+    const combinedScore = home + away;
+    if (combinedScore === total) return 'push';
+    if (dir === 'over')  return combinedScore > total ? 'won' : 'lost';
+    if (dir === 'under') return combinedScore < total ? 'won' : 'lost';
+  }
+
+  return null; // unrecognized format
+}
+
+// ── HELPERS ──
+function formatTimeAgo(isoStr) {
+  if (!isoStr) return '';
+  const diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
+  if (diff < 60)   return 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
 // ── INIT ──
 // Auto-refresh odds every 5 min when on bet tab
 setInterval(() => { if (document.getElementById('panel-bet').classList.contains('active')) fetchOdds(); }, 300000);
+// Auto-grade bets every 10 min
+setInterval(() => autoGradeBets(), 600000);
 </script>
 </body>
 </html>
