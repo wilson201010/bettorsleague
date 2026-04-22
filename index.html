@@ -1081,11 +1081,9 @@ async function fetchGolfTopFinish(marketKey) {
 }
 
 
+async function fetchTennisOdds() {
   try {
     const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports?apiKey=${ODDS_KEY}`);
-    if (!sportsRes.ok) return;
-    const allSports = await sportsRes.json();
-    const tennisSports = allSports.filter(s => s.group === 'Tennis' && s.active);
     if (!tennisSports.length) {
       document.getElementById('games-container').innerHTML = '<div class="empty">No active tennis tournaments right now.</div>';
       return;
