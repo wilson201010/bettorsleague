@@ -1333,12 +1333,15 @@ async function fetchPerEventOdds(markets, isProps) {
     if (!evRes.ok) return;
     const events = await evRes.json();
     const now = new Date();
+    const cutoff = new Date(now.getTime() + 30 * 60 * 1000); // must start 30+ mins from now
     const upcoming = events
-      .filter(e => new Date(e.commence_time) > now) // upcoming only — no live games
+      .filter(e => new Date(e.commence_time) > now) // strictly upcoming only
       .slice(0, isProps ? 6 : 15);
     if (!upcoming.length) return;
 
     for (const ev of upcoming) {
+      // Double-check: skip if game has actually started by now
+      if (new Date(ev.commence_time) <= now) continue;
       try {
         const pRes = await fetch(`https://api.the-odds-api.com/v4/sports/${baseKey}/events/${ev.id}/odds?apiKey=${ODDS_KEY}&regions=us&markets=${markets}&oddsFormat=decimal&dateFormat=iso`);
         if (!pRes.ok) continue;
@@ -1547,16 +1550,17 @@ function renderGames() {
   }
 
   // ── Render props ──
-  if (props.length) {
+  const upcomingProps = props.filter(p => !p.isLive);
+  if (upcomingProps.length) {
     const byGame = {};
-    props.forEach(p => {
+    upcomingProps.forEach(p => {
       const gameKey = `${p.away} @ ${p.home}`;
-      if (!byGame[gameKey]) byGame[gameKey] = { sport: p.sport, time: p.time, isLive: p.isLive, rows: [] };
+      if (!byGame[gameKey]) byGame[gameKey] = { sport: p.sport, time: p.time, isLive: false, rows: [] };
       byGame[gameKey].rows.push(p);
     });
 
     const gameKeys = Object.keys(byGame);
-    html += `<div class="sec-title">Player Props (${props.length} markets · ${gameKeys.length} games)</div>`;
+    html += `<div class="sec-title">Player Props (${upcomingProps.length} markets · ${gameKeys.length} games)</div>`;
     gameKeys.forEach((gameKey, gi) => {
       const gameData = byGame[gameKey];
       const gid = 'prop-group-' + gi;
