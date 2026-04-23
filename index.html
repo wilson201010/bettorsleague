@@ -635,6 +635,27 @@ function calcWin(wager, odds) {
   return o > 0 ? w*o/100 : w*100/Math.abs(o);
 }
 
+// Convert American odds → decimal multiplier
+function am2dec(odds) {
+  const o = parseInt(odds);
+  if (isNaN(o)) return 1;
+  return o > 0 ? (o/100) + 1 : (100/Math.abs(o)) + 1;
+}
+
+// Combine array of American odds into a single parlay payout (American)
+function calcParlayOdds(oddsArr) {
+  if (!oddsArr.length) return 0;
+  const combined = oddsArr.reduce((acc, o) => acc * am2dec(o), 1);
+  // Convert decimal back to American
+  if (combined >= 2) return Math.round((combined - 1) * 100);
+  return Math.round(-100 / (combined - 1));
+}
+
+function calcParlayWin(wager, oddsArr) {
+  const dec = oddsArr.reduce((acc, o) => acc * am2dec(o), 1);
+  return parseFloat(wager) * (dec - 1);
+}
+
 function showToast(msg, isError=false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -1479,9 +1500,9 @@ function setSport(sport, btn) {
 
 function setBetType(type, btn) {
   betType = type;
-  document.querySelectorAll('.bet-type-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.bet-type-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  if (type==='parlay'||type==='teaser') showToast('Parlays & teasers coming soon!');
+  renderSlip();
 }
 
 // ── RENDER GAMES ──
@@ -1746,25 +1767,19 @@ function renderSlip() {
     return;
   }
 
-  const totalWager = slipItems.reduce((a,s) => a+parseFloat(s.wager||0), 0);
-  const totalWin   = slipItems.reduce((a,s) => a+calcWin(s.wager, s.odds), 0);
-  summaryEl.textContent = `$${totalWager.toFixed(0)} to win $${totalWin.toFixed(0)}`;
-
-  // ── Multi-league checkboxes ──
+  // ── League selector (shared between straight and parlay) ──
   let leagueSection = '';
   if (!userLeagues.length) {
     leagueSection = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">No leagues — create one first</div>';
   } else if (userLeagues.length === 1) {
-    // Single league: keep the original dropdown UX
     const l = userLeagues[0];
     leagueSection = `
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:5px;">Place in League</div>
       <select class="slip-league-select" id="slip-league-select">
         <option value="">Select league...</option>
-        <option value="${l.league_id}" selected>${escHtml(l.leagues.name)} ($${parseFloat(l.balance).toFixed(0)} avail)</option>
+        <option value="${l.league_id}">${escHtml(l.leagues.name)} ($${parseFloat(l.balance).toFixed(0)} avail)</option>
       </select>`;
   } else {
-    // Multiple leagues: checkboxes
     leagueSection = `
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">Place in Leagues</div>
       <div id="slip-league-checks" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;">
@@ -1777,6 +1792,68 @@ function renderSlip() {
         `).join('')}
       </div>`;
   }
+
+  // ── PARLAY MODE ──
+  if (betType === 'parlay') {
+    if (slipItems.length < 2) {
+      summaryEl.textContent = 'Add 2+ picks for a parlay';
+      contentEl.innerHTML = `
+        ${slipItems.map((s,i) => `
+          <div class="slip-item">
+            <div class="slip-item-info">
+              <div class="slip-pick">${escHtml(s.pick)} <span class="slip-odds-tag">${s.odds}</span></div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(s.sport||'')}</div>
+            </div>
+            <button class="slip-remove" onclick="removeBet(${i})">×</button>
+          </div>`).join('')}
+        <div style="font-size:12px;color:var(--muted);text-align:center;padding:10px 0;">Add ${2-slipItems.length} more pick${slipItems.length===1?'':'s'} to build a parlay</div>
+      `;
+      return;
+    }
+
+    const allOdds = slipItems.map(s => parseInt(s.odds));
+    const parlayOdds = calcParlayOdds(allOdds);
+    const parlayOddsStr = parlayOdds >= 0 ? `+${parlayOdds}` : `${parlayOdds}`;
+
+    // Single wager for whole parlay
+    const parlayWager = parseFloat(slipItems[0].parlayWager || 50);
+    const parlayWin = calcParlayWin(parlayWager, allOdds);
+    summaryEl.textContent = `${slipItems.length}-leg parlay ${parlayOddsStr}`;
+
+    contentEl.innerHTML = `
+      <div style="background:var(--surface2);border:1px solid var(--gold);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">${slipItems.length}-Leg Parlay</div>
+        ${slipItems.map((s,i) => `
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(s.pick)}</div>
+              <div style="font-size:10px;color:var(--muted);">${escHtml(s.sport||'')} · <span style="color:var(--gold);">${s.odds >= 0 ? '+' : ''}${s.odds}</span></div>
+            </div>
+            <button class="slip-remove" onclick="removeBet(${i})" style="flex-shrink:0;">×</button>
+          </div>`).join('')}
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--gold);letter-spacing:1px;">${parlayOddsStr}</div>
+          <div style="font-size:11px;color:var(--muted);">combined odds</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="font-size:11px;color:var(--muted);flex-shrink:0;">Wager $</span>
+        <input class="slip-wager-input" type="number" value="${parlayWager}" min="1" style="flex:1;"
+          oninput="updateParlayWager(this.value)" />
+        <span style="font-size:12px;color:var(--green);flex-shrink:0;font-weight:600;">Win $${parlayWin.toFixed(2)}</span>
+      </div>
+      ${leagueSection}
+      <div class="slip-totals"><span>Wager</span><span>$${parlayWager.toFixed(2)}</span></div>
+      <div class="slip-totals"><span>To win</span><span style="color:var(--green);">+$${parlayWin.toFixed(2)}</span></div>
+      <button class="place-btn" onclick="placeBets()">Place Parlay</button>
+    `;
+    return;
+  }
+
+  // ── STRAIGHT MODE ──
+  const totalWager = slipItems.reduce((a,s) => a+parseFloat(s.wager||0), 0);
+  const totalWin   = slipItems.reduce((a,s) => a+calcWin(s.wager, s.odds), 0);
+  summaryEl.textContent = `$${totalWager.toFixed(0)} to win $${totalWin.toFixed(0)}`;
 
   contentEl.innerHTML = `
     ${slipItems.map((s,i) => `
@@ -1805,6 +1882,12 @@ function updateWager(i, val) {
   renderSlip();
 }
 
+function updateParlayWager(val) {
+  // Store wager on all items so we can read it back
+  slipItems.forEach(s => s.parlayWager = parseFloat(val)||0);
+  renderSlip();
+}
+
 function removeBet(i) {
   slipItems.splice(i, 1);
   renderGames();
@@ -1814,8 +1897,9 @@ function removeBet(i) {
 // ── PLACE BETS ──
 async function placeBets() {
   if (!slipItems.length) return;
+  if (betType === 'parlay' && slipItems.length < 2) { showToast('Add at least 2 picks for a parlay!', true); return; }
 
-  // Get selected leagues — either single dropdown or multi checkboxes
+  // Get selected leagues
   let selectedLeagueIds = [];
   const singleSelect = document.getElementById('slip-league-select');
   if (singleSelect) {
@@ -1823,14 +1907,16 @@ async function placeBets() {
   } else {
     selectedLeagueIds = Array.from(document.querySelectorAll('.slip-league-chk:checked')).map(c => c.value);
   }
-
   if (!selectedLeagueIds.length) { showToast('Select at least one league!', true); return; }
 
   // Validate balance for each selected league
+  const totalWager = betType === 'parlay'
+    ? parseFloat(slipItems[0].parlayWager || 50)
+    : slipItems.reduce((a,s) => a + parseFloat(s.wager), 0);
+
   for (const lid of selectedLeagueIds) {
     const member = userLeagues.find(l => l.league_id === lid);
     const balance = parseFloat(member?.balance || 0);
-    const totalWager = slipItems.reduce((a,s) => a + parseFloat(s.wager), 0);
     if (totalWager > balance) {
       showToast(`Insufficient balance in ${member?.leagues?.name || 'league'}!`, true);
       return;
@@ -1846,35 +1932,73 @@ async function placeBets() {
     for (const leagueId of selectedLeagueIds) {
       const member = userLeagues.find(l => l.league_id === leagueId);
       const balance = parseFloat(member.balance);
-      const totalWager = slipItems.reduce((a,s) => a + parseFloat(s.wager), 0);
 
-      const inserts = slipItems.map(s => {
-        const game = allGames.find(g => g.id === s.gameId);
-        return {
+      if (betType === 'parlay') {
+        // ── PARLAY: single bet row with legs stored as JSON ──
+        const allOdds = slipItems.map(s => parseInt(s.odds));
+        const parlayOdds = calcParlayOdds(allOdds);
+        const parlayWager = parseFloat(slipItems[0].parlayWager || 50);
+        const parlayWin = calcParlayWin(parlayWager, allOdds);
+        const legs = slipItems.map(s => {
+          const game = allGames.find(g => g.id === s.gameId);
+          return {
+            gameId: s.gameId,
+            pick: s.pick,
+            odds: parseInt(s.odds),
+            sport: s.sport,
+            game_time: game?.rawTime || null
+          };
+        });
+        // Use the earliest game time as the parlay's game_time
+        const gameTime = legs.map(l => l.game_time).filter(Boolean).sort()[0] || null;
+
+        const { error } = await db.from('bets').insert({
           user_id:       currentUser.id,
           league_id:     leagueId,
-          game_id:       s.gameId,
-          game_time:     game?.rawTime || null,
-          sport:         s.sport,
-          pick:          s.pick,
-          odds:          parseInt(s.odds),
-          wager:         parseFloat(s.wager),
-          potential_win: parseFloat(calcWin(s.wager, s.odds).toFixed(2)),
-          status:        'pending'
-        };
-      });
+          game_id:       'parlay_' + Date.now(),
+          game_time:     gameTime,
+          sport:         [...new Set(slipItems.map(s => s.sport))].join('/'),
+          pick:          `${slipItems.length}-Leg Parlay`,
+          odds:          parlayOdds,
+          wager:         parlayWager,
+          potential_win: parseFloat(parlayWin.toFixed(2)),
+          status:        'pending',
+          type:          'parlay',
+          legs:          JSON.stringify(legs)
+        });
+        if (error) { console.error('Parlay insert error:', error); showToast('Error: ' + error.message, true); continue; }
 
-      const { error } = await db.from('bets').insert(inserts);
-      if (error) {
-        console.error('Bet insert error:', error);
-        showToast('Error in ' + member.leagues.name + ': ' + error.message, true);
-        continue;
+        await db.from('league_members')
+          .update({ balance: balance - parlayWager })
+          .eq('league_id', leagueId)
+          .eq('user_id', currentUser.id);
+
+      } else {
+        // ── STRAIGHT: one row per pick ──
+        const inserts = slipItems.map(s => {
+          const game = allGames.find(g => g.id === s.gameId);
+          return {
+            user_id:       currentUser.id,
+            league_id:     leagueId,
+            game_id:       s.gameId,
+            game_time:     game?.rawTime || null,
+            sport:         s.sport,
+            pick:          s.pick,
+            odds:          parseInt(s.odds),
+            wager:         parseFloat(s.wager),
+            potential_win: parseFloat(calcWin(s.wager, s.odds).toFixed(2)),
+            status:        'pending',
+            type:          'straight'
+          };
+        });
+        const { error } = await db.from('bets').insert(inserts);
+        if (error) { console.error('Bet insert error:', error); showToast('Error: ' + error.message, true); continue; }
+
+        await db.from('league_members')
+          .update({ balance: balance - totalWager })
+          .eq('league_id', leagueId)
+          .eq('user_id', currentUser.id);
       }
-
-      await db.from('league_members')
-        .update({ balance: balance - totalWager })
-        .eq('league_id', leagueId)
-        .eq('user_id', currentUser.id);
 
       totalPlaced++;
     }
@@ -1884,15 +2008,15 @@ async function placeBets() {
       renderGames();
       renderSlip();
       await loadLeagues();
-      const leagueWord = totalPlaced > 1 ? `${totalPlaced} leagues` : selectedLeagueIds.length === 1 ? userLeagues.find(l=>l.league_id===selectedLeagueIds[0])?.leagues?.name : 'league';
-      showToast(`Bets placed in ${leagueWord}! Good luck. 🎯`);
+      const leagueWord = totalPlaced > 1 ? `${totalPlaced} leagues` : userLeagues.find(l=>l.league_id===selectedLeagueIds[0])?.leagues?.name || 'league';
+      const betWord = betType === 'parlay' ? 'Parlay placed' : 'Bets placed';
+      showToast(`${betWord} in ${leagueWord}! Good luck. 🎯`);
     }
   } catch(e) {
     console.error('placeBets exception:', e);
     showToast('Unexpected error: ' + e.message, true);
-    if (btn) { btn.disabled = false; btn.textContent = 'Place Bets'; }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Place Bets'; }
+    if (btn) { btn.disabled = false; btn.textContent = betType === 'parlay' ? 'Place Parlay' : 'Place Bets'; }
   }
 }
 
@@ -1901,7 +2025,7 @@ async function loadMyBets() {
   try {
     const { data, error } = await dbQuery(() =>
       db.from('bets')
-        .select('id, pick, odds, sport, wager, potential_win, status, result, placed_at, league_id')
+        .select('id, pick, odds, sport, wager, potential_win, status, result, placed_at, league_id, type, legs')
         .eq('user_id', currentUser.id)
         .order('placed_at', { ascending: false })
         .limit(100)
@@ -1917,28 +2041,40 @@ async function loadMyBets() {
     document.getElementById('dash-open').textContent   = open.length;
 
     const openEl = document.getElementById('open-bets');
-    openEl.innerHTML = open.length ? open.map(b => `
-      <div class="bet-row">
-        <div class="bet-dot pending"></div>
-        <div class="bet-info">
-          <div class="bet-pick">${escHtml(b.pick)} <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span></div>
-          <div class="bet-meta">${escHtml(b.sport||'')} · $${parseFloat(b.wager).toFixed(2)} wagered · ${formatTimeAgo(b.placed_at)}</div>
-        </div>
-        <div class="bet-result positive">to win $${parseFloat(b.potential_win).toFixed(2)}</div>
-      </div>
-    `).join('') : '<div class="empty">No open bets.</div>';
+    openEl.innerHTML = open.length ? open.map(b => {
+      const isParlay = b.type === 'parlay';
+      const legs = isParlay && b.legs ? JSON.parse(b.legs) : null;
+      return `
+        <div class="bet-row">
+          <div class="bet-dot pending"></div>
+          <div class="bet-info">
+            <div class="bet-pick">
+              ${isParlay ? `<span style="color:var(--gold);font-size:10px;font-weight:700;text-transform:uppercase;margin-right:4px;">PARLAY</span>` : ''}
+              ${escHtml(b.pick)} <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
+            </div>
+            ${legs ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">${legs.map(l=>escHtml(l.pick)).join(' · ')}</div>` : ''}
+            <div class="bet-meta">${escHtml(b.sport||'')} · $${parseFloat(b.wager).toFixed(2)} wagered · ${formatTimeAgo(b.placed_at)}</div>
+          </div>
+          <div class="bet-result positive">to win $${parseFloat(b.potential_win).toFixed(2)}</div>
+        </div>`;
+    }).join('') : '<div class="empty">No open bets.</div>';
 
     const settledEl = document.getElementById('settled-bets');
-    settledEl.innerHTML = settled.length ? settled.map(b => `
-      <div class="bet-row">
-        <div class="bet-dot ${escHtml(b.status)}"></div>
-        <div class="bet-info">
-          <div class="bet-pick">${escHtml(b.pick)} <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span></div>
-          <div class="bet-meta">${escHtml(b.sport||'')} · $${parseFloat(b.wager).toFixed(2)} wagered</div>
-        </div>
-        <div class="bet-result ${parseFloat(b.result||0) >= 0 ? 'positive' : 'negative'}">${parseFloat(b.result||0) >= 0 ? '+' : ''}$${Math.abs(parseFloat(b.result||0)).toFixed(2)}</div>
-      </div>
-    `).join('') : '<div class="empty">No settled bets yet.</div>';
+    settledEl.innerHTML = settled.length ? settled.map(b => {
+      const isParlay = b.type === 'parlay';
+      return `
+        <div class="bet-row">
+          <div class="bet-dot ${escHtml(b.status)}"></div>
+          <div class="bet-info">
+            <div class="bet-pick">
+              ${isParlay ? `<span style="color:var(--gold);font-size:10px;font-weight:700;text-transform:uppercase;margin-right:4px;">PARLAY</span>` : ''}
+              ${escHtml(b.pick)} <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
+            </div>
+            <div class="bet-meta">${escHtml(b.sport||'')} · $${parseFloat(b.wager).toFixed(2)} wagered</div>
+          </div>
+          <div class="bet-result ${parseFloat(b.result||0) >= 0 ? 'positive' : 'negative'}">${parseFloat(b.result||0) >= 0 ? '+' : ''}$${Math.abs(parseFloat(b.result||0)).toFixed(2)}</div>
+        </div>`;
+    }).join('') : '<div class="empty">No settled bets yet.</div>';
   } catch(e) {
     console.error('loadMyBets error:', e);
     document.getElementById('open-bets').innerHTML = '<div class="empty" style="cursor:pointer" onclick="loadMyBets()">⟳ Tap to retry</div>';
@@ -2178,6 +2314,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
           <div class="activity-content">
             <div class="activity-text">
               <strong>${escHtml(isMe ? 'You' : username)}</strong> bet
+              ${b.type === 'parlay' ? '<span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:3px;">PARLAY</span>' : ''}
               <strong>${escHtml(b.pick)}</strong>
               <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
               <span class="activity-badge ${b.status}">${b.status}</span>
