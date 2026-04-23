@@ -1031,7 +1031,7 @@ async function fetchOdds() {
       const now = new Date();
       const seenGames = new Set(allGames.map(g => g.id));
       data
-        .filter(g => sub?.liveOnly ? new Date(g.commence_time) <= now : new Date(g.commence_time) > now)
+        .filter(g => new Date(g.commence_time) > now) // upcoming only — no live bets
         .filter(g => !seenGames.has(g.id))
         .slice(0, 15)
         .forEach(game => {
@@ -1932,16 +1932,16 @@ async function loadLeaderboard(leagueId) {
   const el = document.getElementById('league-tab-leaderboard');
   el.innerHTML = '<div class="loading">Loading standings...</div>';
   try {
-    const { data: members, error: mErr } = await dbQuery(() =>
-      db.from('league_members').select('user_id, balance').eq('league_id', leagueId).order('balance', { ascending: false })
+    const { data: membersRaw, error: mErr } = await dbQuery(() =>
+      db.from('league_members').select('user_id, balance').eq('league_id', leagueId)
     );
     if (mErr) throw mErr;
-    if (!members?.length) { el.innerHTML = '<div class="empty">No members yet.</div>'; return; }
+    if (!membersRaw?.length) { el.innerHTML = '<div class="empty">No members yet.</div>'; return; }
 
-    const userMap = await getProfiles(members.map(m => m.user_id));
+    const userMap = await getProfiles(membersRaw.map(m => m.user_id));
 
     const { data: bets } = await dbQuery(() =>
-      db.from('bets').select('user_id, status, wager').eq('league_id', leagueId)
+      db.from('bets').select('user_id, status, wager, potential_win').eq('league_id', leagueId)
     );
 
     const betsByUser = {};
@@ -1953,15 +1953,37 @@ async function loadLeaderboard(leagueId) {
       else s.pending++;
     });
 
+    // Compute settled net per user, then sort by it descending
+    const getSettledNet = (userId) =>
+      (bets||[])
+        .filter(b => b.user_id === userId && b.status !== 'pending')
+        .reduce((sum, b) => {
+          if (b.status === 'won') return sum + parseFloat(b.potential_win || 0);
+          if (b.status === 'lost') return sum - parseFloat(b.wager || 0);
+          return sum;
+        }, 0);
+
+    const members = [...membersRaw].sort((a, b) => getSettledNet(b.user_id) - getSettledNet(a.user_id));
+
     const startBal = parseFloat(currentLeague?.leagues?.bankroll || 1000);
     const rankColors = ['gold','silver','bronze'];
     el.innerHTML = members.map((m, i) => {
       const stats = betsByUser[m.user_id] || { won:0, lost:0, pending:0 };
       const bal = parseFloat(m.balance);
-      const net = bal - startBal;
       const isMe = m.user_id === currentUser.id;
       const username = userMap[m.user_id] || 'Player';
-      const netColor = net > 0 ? 'positive' : net < 0 ? 'negative' : '';
+
+      // Net = only settled results (won adds potential_win, lost subtracts wager)
+      // Pending bets are excluded — balance already had wager deducted,
+      // so net from settled = balance - startBal + pending wagers still locked up.
+      // We compute settled net directly from bet records for accuracy.
+      const settledNet = getSettledNet(m.user_id);
+
+      const netColor = settledNet > 0 ? 'positive' : settledNet < 0 ? 'negative' : '';
+      const netStr = settledNet === 0
+        ? '$0'
+        : `${settledNet > 0 ? '+' : '-'}$${Math.abs(settledNet).toFixed(0)}`;
+
       return `
         <div class="leaderboard-row${isMe ? ' lb-me' : ''}">
           <div class="lb-rank ${rankColors[i] || 'other'}">${i+1}</div>
@@ -1971,8 +1993,8 @@ async function loadLeaderboard(leagueId) {
             <div class="lb-record">${stats.won}W–${stats.lost}L · ${stats.pending} pending</div>
           </div>
           <div class="lb-bal">
-            <div class="lb-bal-amt ${netColor}" style="font-size:20px;">${net >= 0 ? '+' : '-'}$${Math.abs(net).toFixed(0)}</div>
-            <div class="lb-bal-change" style="color:var(--muted);">$${bal.toFixed(0)} bal</div>
+            <div class="lb-bal-amt ${netColor}" style="font-size:20px;">${netStr}</div>
+            <div class="lb-bal-change" style="color:var(--muted);">$${bal.toFixed(0)} avail</div>
           </div>
         </div>`;
     }).join('');
