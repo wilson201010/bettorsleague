@@ -1062,6 +1062,7 @@ async function fetchOdds() {
             id: game.id, sport: SPORT_NAME_MAP[sportKey]||sportKey,
             home: game.home_team, away: game.away_team,
             isLive: diffMins < 0, time: timeStr, isProp: false,
+            rawTime: game.commence_time, // ISO — used for bet reveal logic
             ml:     { home: dec2am(homeH2H?.price),  away: dec2am(awayH2H?.price) },
             spread: { home: homeSprd ? (homeSprd.point>0?'+':'')+homeSprd.point : 'N/A',
                       away: awaySprd ? (awaySprd.point>0?'+':'')+awaySprd.point : 'N/A',
@@ -1785,17 +1786,27 @@ async function placeBets() {
   if (btn) { btn.disabled = true; btn.textContent = 'Placing...'; }
 
   try {
-    const inserts = slipItems.map(s => ({
-      user_id:       currentUser.id,
-      league_id:     leagueId,
-      game_id:       s.gameId,
-      sport:         s.sport,
-      pick:          s.pick,
-      odds:          parseInt(s.odds),
-      wager:         parseFloat(s.wager),
-      potential_win: parseFloat(calcWin(s.wager, s.odds).toFixed(2)),
-      status:        'pending'
-    }));
+    const inserts = slipItems.map(s => {
+      // Find the game to get its start time
+      const game = allGames.find(g => g.id === s.gameId);
+      // Parse game time from the time string — fallback to placed_at + 6hrs if unknown
+      let gameTime = null;
+      if (game?.rawTime) {
+        gameTime = game.rawTime; // ISO string stored on game object
+      }
+      return {
+        user_id:       currentUser.id,
+        league_id:     leagueId,
+        game_id:       s.gameId,
+        game_time:     gameTime,
+        sport:         s.sport,
+        pick:          s.pick,
+        odds:          parseInt(s.odds),
+        wager:         parseFloat(s.wager),
+        potential_win: parseFloat(calcWin(s.wager, s.odds).toFixed(2)),
+        status:        'pending'
+      };
+    });
 
     const { error } = await db.from('bets').insert(inserts);
     if (error) {
@@ -2011,7 +2022,7 @@ async function loadActivity(leagueId) {
   try {
     const { data: bets, error } = await dbQuery(() =>
       db.from('bets')
-        .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at, game_id')
+        .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at, game_id, game_time')
         .eq('league_id', leagueId)
         .order('placed_at', { ascending: false })
         .limit(50)
@@ -2028,14 +2039,12 @@ async function loadActivity(leagueId) {
       const initial = username[0].toUpperCase();
       const timeAgo = formatTimeAgo(b.placed_at);
       const isMe = b.user_id === currentUser.id;
-
-      // ── FIX #2: hide bet details before game starts ──
-      // game_id format from Odds API: {sport}_{datetime}_{teams} — we stored placed_at
-      // Hide pick details if bet is still pending AND was placed recently (game likely not started)
-      // We use a simple heuristic: if pending and NOT live (status pending), show masked version
-      // unless it's the current user's own bet
       const isSettled = b.status !== 'pending';
-      const showDetails = isMe || isSettled;
+
+      // Reveal details when: it's your own bet, OR bet is settled, OR game has started
+      // game_time is stored as ISO string when bet is placed
+      const gameStarted = b.game_time ? new Date(b.game_time) <= now : false;
+      const showDetails = isMe || isSettled || gameStarted;
 
       const resultText = b.status === 'won'
         ? `+$${parseFloat(b.potential_win||0).toFixed(2)}`
@@ -2044,7 +2053,9 @@ async function loadActivity(leagueId) {
         : `$${parseFloat(b.wager||0).toFixed(2)} wagered`;
 
       if (!showDetails) {
-        // Masked: show sport only, no pick/odds
+        const revealTime = b.game_time
+          ? new Date(b.game_time).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', timeZoneName:'short'})
+          : 'game time';
         return `
           <div class="activity-row">
             <div class="activity-avatar">${initial}</div>
@@ -2052,9 +2063,9 @@ async function loadActivity(leagueId) {
               <div class="activity-text">
                 <strong>${escHtml(username)}</strong> placed a bet on
                 <strong>${escHtml(b.sport||'a game')}</strong>
-                <span class="activity-badge pending">pending</span>
+                <span class="activity-badge pending">locked</span>
               </div>
-              <div class="activity-time">Details revealed when game starts · ${timeAgo}</div>
+              <div class="activity-time">Reveals at ${revealTime} · ${timeAgo}</div>
             </div>
           </div>`;
       }
