@@ -2232,7 +2232,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
     let bets, error;
     ({ data: bets, error } = await dbQuery(() =>
       db.from('bets')
-        .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at, game_id, game_time')
+        .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at, game_id, game_time, type, legs')
         .eq('league_id', leagueId)
         .order('placed_at', { ascending: false })
         .limit(50)
@@ -2241,7 +2241,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
     if (error && error.message?.includes('game_time')) {
       ({ data: bets, error } = await dbQuery(() =>
         db.from('bets')
-          .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at, game_id')
+          .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at, game_id, type, legs')
           .eq('league_id', leagueId)
           .order('placed_at', { ascending: false })
           .limit(50)
@@ -2362,12 +2362,23 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
 
       // ── OWN BET or revealed: show all details ──
       const ownParlayLegs = isParlay && legs ? `
-        <div style="margin-top:4px;">
-          ${legs.map(l => `
-            <div style="font-size:11px;padding:3px 6px;background:var(--surface2);border-radius:4px;margin-top:2px;display:flex;align-items:center;gap:6px;">
-              <span style="font-weight:500;">${escHtml(l.pick)}</span>
-              <span style="color:var(--gold)">${l.odds > 0 ? '+' : ''}${l.odds}</span>
-            </div>`).join('')}
+        <div style="margin-top:5px;border-left:2px solid var(--gold);padding-left:8px;">
+          ${legs.map(l => {
+            const legStarted = l.game_time ? new Date(l.game_time) <= now : true;
+            const statusDot = legStarted
+              ? '<span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;flex-shrink:0;"></span>'
+              : '<span style="width:6px;height:6px;border-radius:50%;background:var(--gold);display:inline-block;flex-shrink:0;"></span>';
+            const gameTime = l.game_time
+              ? new Date(l.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
+              : '';
+            return `
+              <div style="font-size:11px;padding:3px 0;display:flex;align-items:center;gap:6px;">
+                ${statusDot}
+                <span style="font-weight:500;flex:1;">${escHtml(l.pick)}</span>
+                <span style="color:var(--gold);flex-shrink:0;">${l.odds > 0 ? '+' : ''}${l.odds}</span>
+                ${!legStarted && gameTime ? `<span style="color:var(--muted);font-size:10px;flex-shrink:0;">${gameTime}</span>` : ''}
+              </div>`;
+          }).join('')}
         </div>` : '';
 
       return `
