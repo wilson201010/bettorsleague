@@ -480,28 +480,7 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
       <div id="ep-avatar-preview" style="width:64px;height:64px;border-radius:50%;background:var(--surface2);border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 8px;cursor:pointer;" onclick="toggleEmojiGrid('ep-emoji-grid')">?</div>
       <div style="font-size:11px;color:var(--muted);">Tap to change avatar</div>
       <input type="hidden" id="ep-avatar-hidden" value="" />
-      <div class="emoji-grid" id="ep-emoji-grid" style="display:none;margin-top:8px;">
-        <span class="emoji-opt" onclick="pickProfileEmoji('🏆')">🏆</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🔥')">🔥</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('💰')">💰</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('😈')">😈</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🤑')">🤑</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('👑')">👑</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🎯')">🎯</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🦁')">🦁</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🐐')">🐐</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('💎')">💎</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🚀')">🚀</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🎲')">🎲</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🍺')">🍺</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('💪')">💪</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🎰')">🎰</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🏈')">🏈</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('⚾')">⚾</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🏀')">🏀</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('🏒')">🏒</span>
-        <span class="emoji-opt" onclick="pickProfileEmoji('⛳')">⛳</span>
-      </div>
+      <div id="ep-emoji-grid" style="display:none;margin-top:8px;max-height:150px;overflow-y:auto;flex-wrap:wrap;gap:4px;padding:8px;background:var(--surface2);border-radius:10px;border:1px solid var(--border2);"></div>
     </div>
     <div class="form-row"><label class="form-label">Username</label><input class="form-input" type="text" id="ep-username" placeholder="e.g. SharpShooter99" /></div>
     <div style="display:flex;gap:8px;">
@@ -967,10 +946,30 @@ function setLeagueType(t) {
   document.getElementById('type-desc').textContent = t==='weekly' ? 'Runs Mon–Sun. $1,000 bankroll resets weekly.' : 'Custom dates. Bankroll runs full duration.';
 }
 
+const PROFILE_EMOJIS = [
+  '🏆','🔥','💰','😈','🤑','👑','🎯','💎','🚀','🎲','🍺','💪','🎰','🐐',
+  '🏈','⚾','🏀','🏒','⛳','🎾','🥊','⚽','🏐','🏉','🎳','🎱','🏋️','🤺',
+  '🦁','🐯','🦊','🐺','🦅','🦈','🐊','🦂','🦍','🦄','🐉','🦖','🐆','🦝',
+  '🌟','⭐','💫','✨','⚡','🌊','🌋','🌙','☀️','🌈',
+  '💣','💥','🔑','🏹','⚔️','🛡️','🎖️','🥇','🎗️','🎉','🎊','🎈',
+  '🎸','🎤','🎬','🎭','🎨','🎪','🎡','🎢','🎠',
+  '🍕','🍔','🌮','🥩','🍗','🍻','🥂','🍾','🥃','🍫',
+  '🚗','🏎️','🚁','🛥️','🚂','🛸','✈️','🚀',
+  '👻','💀','🤖','👾','🎃','🕷️','🦇','🌚','☠️',
+  '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🩶','🩷'
+];
+
 function toggleEmojiGrid(gridId) {
   const g = document.getElementById(gridId || 'emoji-grid');
   if (!g) return;
-  g.style.display = g.style.display==='none'||g.style.display===''?'flex':'none';
+  // Populate profile emoji grid on first open
+  if (gridId === 'ep-emoji-grid' && !g.dataset.populated) {
+    g.innerHTML = PROFILE_EMOJIS.map(e =>
+      `<span style="font-size:24px;padding:5px;cursor:pointer;border-radius:6px;display:inline-block;" onclick="pickProfileEmoji('${e}')">${e}</span>`
+    ).join('');
+    g.dataset.populated = '1';
+  }
+  g.style.display = g.style.display === 'none' || g.style.display === '' ? 'flex' : 'none';
 }
 
 function pickEmoji(e) {
