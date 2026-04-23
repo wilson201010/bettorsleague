@@ -2524,86 +2524,190 @@ async function copyInvite() {
 async function autoGradeBets() {
   if (!currentUser) return;
   try {
-    // Get all pending bets for this user
-    const { data: pendingBets } = await db
-      .from('bets')
-      .select('*')
-      .eq('user_id', currentUser.id)
-      .eq('status', 'pending');
-
+    const { data: pendingBets } = await dbQuery(() =>
+      db.from('bets').select('*').eq('user_id', currentUser.id).eq('status', 'pending')
+    );
     if (!pendingBets?.length) return;
 
-    // Group by sport to minimize API calls
-    const bySport = {};
-    pendingBets.forEach(b => {
-      if (!bySport[b.sport]) bySport[b.sport] = [];
-      bySport[b.sport].push(b);
+    // Separate straight bets from parlays
+    const straightBets = pendingBets.filter(b => b.type !== 'parlay');
+    const parlayBets   = pendingBets.filter(b => b.type === 'parlay');
+
+    // ── Fetch all completed scores we need ──
+    // Collect all unique sport keys needed
+    const sportsNeeded = new Set();
+    straightBets.forEach(b => { const k = SCORES_SPORT_MAP[b.sport]; if (k) sportsNeeded.add(k); });
+    parlayBets.forEach(b => {
+      const legs = safeParseLegs(b.legs);
+      legs.forEach(l => { const k = SCORES_SPORT_MAP[l.sport]; if (k) sportsNeeded.add(k); });
     });
 
-    for (const [sport, bets] of Object.entries(bySport)) {
-      const sportKey = SCORES_SPORT_MAP[sport];
-      if (!sportKey) continue;
+    // Fetch scores per sport key
+    const scoresByKey = {};
+    for (const sportKey of sportsNeeded) {
       try {
-        // Fetch completed scores for last 3 days
         const res = await fetch(
           `https://api.the-odds-api.com/v4/sports/${sportKey}/scores/?apiKey=${ODDS_KEY}&daysFrom=3&dateFormat=iso`
         );
         if (!res.ok) continue;
-        const scores = await res.json();
-        const completed = scores.filter(g => g.completed);
-
-        for (const bet of bets) {
-          const game = completed.find(g => g.id === bet.game_id);
-          if (!game) continue; // game not finished yet
-
-          const result = gradebet(bet, game);
-          if (result === null) continue; // can't determine yet
-
-          const won = result === 'won';
-          const profit = won ? parseFloat(bet.potential_win) : -parseFloat(bet.wager);
-
-          // Update bet status
-          await db.from('bets')
-            .update({ status: result, result: profit })
-            .eq('id', bet.id);
-
-          // Update balance
-          if (won) {
-            const { data: member } = await db
-              .from('league_members')
-              .select('balance')
-              .eq('league_id', bet.league_id)
-              .eq('user_id', currentUser.id)
-              .single();
-            if (member) {
-              const newBal = parseFloat(member.balance) + parseFloat(bet.potential_win) + parseFloat(bet.wager);
-              await db.from('league_members')
-                .update({ balance: newBal })
-                .eq('league_id', bet.league_id)
-                .eq('user_id', currentUser.id);
-            }
-          }
-        }
-      } catch(e) { console.warn('Grade error for', sport, e); }
+        const data = await res.json();
+        scoresByKey[sportKey] = data.filter(g => g.completed);
+      } catch(e) { console.warn('Scores fetch error', sportKey, e); }
     }
-    // Refresh UI after grading
+
+    // Helper: find game in scores
+    const findGame = (gameId, sport) => {
+      const key = SCORES_SPORT_MAP[sport];
+      if (!key || !scoresByKey[key]) return null;
+      return scoresByKey[key].find(g => g.id === gameId) || null;
+    };
+
+    // ── Grade straight bets ──
+    for (const bet of straightBets) {
+      const game = findGame(bet.game_id, bet.sport);
+      if (!game) continue;
+      const result = gradePick(bet.pick, game);
+      if (!result) continue;
+      await settleBet(bet, result);
+    }
+
+    // ── Grade parlays ──
+    for (const bet of parlayBets) {
+      const legs = safeParseLegs(bet.legs);
+      if (!legs.length) continue;
+
+      let parlayLost = false;
+      let updatedLegs = [];
+      let allSettled = true;
+
+      for (const leg of legs) {
+        const game = findGame(leg.gameId, leg.sport);
+        if (!game) {
+          // Game not done yet — parlay still pending
+          allSettled = false;
+          updatedLegs.push(leg);
+          continue;
+        }
+        const result = gradePick(leg.pick, game);
+        if (!result) { allSettled = false; updatedLegs.push(leg); continue; }
+
+        if (result === 'lost') {
+          parlayLost = true;
+          updatedLegs.push({ ...leg, result: 'lost' });
+        } else if (result === 'push') {
+          // Push: remove leg from parlay, recalculate odds
+          updatedLegs.push({ ...leg, result: 'push' });
+        } else {
+          updatedLegs.push({ ...leg, result: 'won' });
+        }
+      }
+
+      if (parlayLost) {
+        // Any loss = whole parlay loses
+        await settleBet(bet, 'lost', JSON.stringify(updatedLegs));
+        continue;
+      }
+
+      if (!allSettled) {
+        // Some legs still pending — update legs JSON but keep parlay pending
+        const activeLegsPush = updatedLegs.filter(l => l.result === 'push');
+        if (activeLegsPush.length > 0) {
+          // Recalculate odds without push legs
+          const remainingLegs = updatedLegs.filter(l => l.result !== 'push');
+          if (remainingLegs.length < 2) {
+            // Only 1 leg left after pushes — treat as straight bet with that leg's odds
+            const singleLeg = remainingLegs[0];
+            const newOdds = singleLeg ? singleLeg.odds : bet.odds;
+            const newWin = calcWin(bet.wager, newOdds);
+            await db.from('bets').update({
+              odds: newOdds,
+              potential_win: parseFloat(newWin.toFixed(2)),
+              legs: JSON.stringify(updatedLegs)
+            }).eq('id', bet.id);
+          } else {
+            const newOdds = calcParlayOdds(remainingLegs.map(l => l.odds));
+            const newWin = calcParlayWin(bet.wager, remainingLegs.map(l => l.odds));
+            await db.from('bets').update({
+              odds: newOdds,
+              potential_win: parseFloat(newWin.toFixed(2)),
+              legs: JSON.stringify(updatedLegs)
+            }).eq('id', bet.id);
+          }
+        } else {
+          // No pushes yet, just update legs progress
+          await db.from('bets').update({ legs: JSON.stringify(updatedLegs) }).eq('id', bet.id);
+        }
+        continue;
+      }
+
+      // All legs settled and none lost — parlay wins!
+      // Final odds based on non-push legs
+      const winningLegs = updatedLegs.filter(l => l.result !== 'push');
+      let finalWin;
+      if (winningLegs.length === 0) {
+        // All legs pushed — return wager
+        finalWin = 0;
+        await settleBet({ ...bet, potential_win: 0, legs: JSON.stringify(updatedLegs) }, 'push');
+      } else if (winningLegs.length === 1) {
+        finalWin = calcWin(bet.wager, winningLegs[0].odds);
+        await settleBet({ ...bet, potential_win: finalWin, legs: JSON.stringify(updatedLegs) }, 'won');
+      } else {
+        finalWin = calcParlayWin(bet.wager, winningLegs.map(l => l.odds));
+        await settleBet({ ...bet, potential_win: finalWin, legs: JSON.stringify(updatedLegs) }, 'won');
+      }
+    }
+
     await loadLeagues();
     await loadMyBets();
   } catch(e) { console.warn('autoGradeBets error:', e); }
 }
 
-// Determine if a bet won or lost based on final scores
-function gradebet(bet, game) {
+// Parse legs JSON safely
+function safeParseLegs(legsJson) {
+  try { return JSON.parse(legsJson) || []; } catch(e) { return []; }
+}
+
+// Settle a bet: update status + result + balance
+async function settleBet(bet, result, updatedLegsJson = null) {
+  const won = result === 'won';
+  const push = result === 'push';
+  const profit = won ? parseFloat(bet.potential_win) : push ? 0 : -parseFloat(bet.wager);
+
+  const updatePayload = { status: result, result: profit };
+  if (updatedLegsJson) updatePayload.legs = updatedLegsJson;
+
+  await db.from('bets').update(updatePayload).eq('id', bet.id);
+
+  // Credit balance on win or push
+  if (won || push) {
+    const { data: member } = await db.from('league_members')
+      .select('balance')
+      .eq('league_id', bet.league_id)
+      .eq('user_id', currentUser.id)
+      .single();
+    if (member) {
+      // On win: return wager + profit. On push: return wager only.
+      const credit = won ? parseFloat(bet.potential_win) + parseFloat(bet.wager) : parseFloat(bet.wager);
+      await db.from('league_members')
+        .update({ balance: parseFloat(member.balance) + credit })
+        .eq('league_id', bet.league_id)
+        .eq('user_id', currentUser.id);
+    }
+  }
+}
+
+// Grade a single pick against a completed game's scores
+function gradePick(pick, game) {
   const homeScore = game.scores?.find(s => s.name === game.home_team)?.score;
   const awayScore = game.scores?.find(s => s.name === game.away_team)?.score;
   if (homeScore == null || awayScore == null) return null;
 
   const home = parseFloat(homeScore), away = parseFloat(awayScore);
-  const pick = (bet.pick || '').toLowerCase();
+  const p = (pick || '').toLowerCase().trim();
 
   // Moneyline: "Team Name ML"
-  if (pick.includes(' ml')) {
-    const team = pick.replace(' ml', '').trim();
+  if (p.includes(' ml')) {
+    const team = p.replace(' ml', '').trim();
     const homeWin = home > away;
     const awayWin = away > home;
     if (game.home_team.toLowerCase().includes(team)) return homeWin ? 'won' : 'lost';
@@ -2612,8 +2716,8 @@ function gradebet(bet, game) {
   }
 
   // Spread: "Team Name +X.X" or "Team Name -X.X"
-  const spreadMatch = pick.match(/^(.+?)\s([+-]\d+\.?\d*)(?:\s|$)/);
-  if (spreadMatch && !pick.includes('over') && !pick.includes('under')) {
+  const spreadMatch = p.match(/^(.+?)\s([+-]\d+\.?\d*)(?:\s|$)/);
+  if (spreadMatch && !p.includes('over') && !p.includes('under')) {
     const team = spreadMatch[1].trim();
     const spread = parseFloat(spreadMatch[2]);
     const isHome = game.home_team.toLowerCase().includes(team);
@@ -2628,7 +2732,7 @@ function gradebet(bet, game) {
   }
 
   // Over/Under: "Over X.X" or "Under X.X"
-  const ouMatch = pick.match(/^(over|under)\s(\d+\.?\d*)/i);
+  const ouMatch = p.match(/^(over|under)\s(\d+\.?\d*)/i);
   if (ouMatch) {
     const dir   = ouMatch[1].toLowerCase();
     const total = parseFloat(ouMatch[2]);
