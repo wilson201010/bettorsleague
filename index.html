@@ -561,18 +561,15 @@ const SPORT_KEYS = {
     { label: 'All',      markets: 'h2h,spreads,totals' },
     { label: '1st Half', markets: 'h2h_h1,spreads_h1,totals_h1', isHalf: true, halfLabels: { spread:'Spread H1', ou:'O/U H1' } },
     { label: 'Props',    markets: 'player_points,player_rebounds,player_assists,player_threes,player_steals,player_blocks,player_turnovers,player_points_rebounds_assists', isProps: true },
-    { label: 'Live',     markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'MLB': [{ key: 'baseball_mlb', label: 'MLB', inSeason: true, subs: [
     { label: 'All',       markets: 'h2h,spreads,totals' },
     { label: '1st 5 Inn', markets: 'h2h_1st_5_innings,spreads_1st_5_innings,totals_1st_5_innings', isHalf: true, halfLabels: { spread:'RL 1st5', ou:'O/U 1st5' } },
     { label: 'Props',     markets: 'batter_home_runs,batter_hits,pitcher_strikeouts,batter_total_bases,batter_rbis,pitcher_hits_allowed,pitcher_walks,batter_stolen_bases', isProps: true },
-    { label: 'Live',      markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'NHL': [{ key: 'icehockey_nhl', label: 'NHL', inSeason: true, subs: [
     { label: 'All',   markets: 'h2h,spreads,totals' },
     { label: 'Props', markets: 'player_points,player_goals,player_assists,player_shots_on_goal,player_power_play_points', isProps: true },
-    { label: 'Live',  markets: 'h2h,spreads,totals', liveOnly: true },
   ]}],
   'NFL': [{ key: 'americanfootball_nfl', label: 'NFL', inSeason: false, subs: [
     { label: 'All',     markets: 'h2h,spreads,totals' },
@@ -781,13 +778,32 @@ function renderDashLeagues() {
   `).join('');
 }
 
+// ── SUPABASE QUERY HELPER: timeout + auto-retry ──
+async function dbQuery(fn, retries = 3, timeoutMs = 6000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const result = await Promise.race([
+        fn(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs))
+      ]);
+      return result;
+    } catch(e) {
+      console.warn(`dbQuery attempt ${i+1} failed:`, e.message);
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
+    }
+  }
+  return { data: null, error: new Error('Query failed after retries') };
+}
+
 // ── LEAGUES ──
 // ── PROFILE CACHE (avoid repeated profile lookups) ──
 const profileCache = {};
 async function getProfiles(userIds) {
   const missing = userIds.filter(id => !profileCache[id]);
   if (missing.length) {
-    const { data } = await db.from('profiles').select('id, username').in('id', missing);
+    const { data } = await dbQuery(() =>
+      db.from('profiles').select('id, username').in('id', missing)
+    );
     (data||[]).forEach(p => { profileCache[p.id] = p.username; });
   }
   return userIds.reduce((acc, id) => { acc[id] = profileCache[id] || 'Player'; return acc; }, {});
@@ -795,31 +811,26 @@ async function getProfiles(userIds) {
 
 async function loadLeagues() {
   try {
-    // Split into two queries — faster and more reliable than the joined version
-    const { data: members, error: mErr } = await db
-      .from('league_members')
-      .select('*')
-      .eq('user_id', currentUser.id);
+    const { data: members, error: mErr } = await dbQuery(() =>
+      db.from('league_members').select('league_id, user_id, balance').eq('user_id', currentUser.id)
+    );
     if (mErr) throw mErr;
     if (!members?.length) { userLeagues = []; renderDashLeagues(); renderLeagues(); renderSlip(); return; }
 
     const leagueIds = members.map(m => m.league_id);
-    const { data: leagues, error: lErr } = await db
-      .from('leagues')
-      .select('*')
-      .in('id', leagueIds);
+    const { data: leagues, error: lErr } = await dbQuery(() =>
+      db.from('leagues').select('*').in('id', leagueIds)
+    );
     if (lErr) throw lErr;
 
     const leagueMap = {};
     (leagues||[]).forEach(l => { leagueMap[l.id] = l; });
-
     userLeagues = members.map(m => ({ ...m, leagues: leagueMap[m.league_id] || {} }));
     renderDashLeagues();
     renderLeagues();
     renderSlip();
   } catch(e) {
     console.error('loadLeagues error:', e);
-    // Show empty state rather than infinite loading
     userLeagues = [];
     renderDashLeagues();
     renderLeagues();
@@ -1815,13 +1826,13 @@ async function placeBets() {
 // ── MY BETS ──
 async function loadMyBets() {
   try {
-    const { data, error } = await db
-      .from('bets')
-      .select('id, pick, odds, sport, wager, potential_win, status, result, placed_at, league_id')
-      .eq('user_id', currentUser.id)
-      .order('placed_at', { ascending: false })
-      .limit(100);
-
+    const { data, error } = await dbQuery(() =>
+      db.from('bets')
+        .select('id, pick, odds, sport, wager, potential_win, status, result, placed_at, league_id')
+        .eq('user_id', currentUser.id)
+        .order('placed_at', { ascending: false })
+        .limit(100)
+    );
     if (error) throw error;
     const bets    = data || [];
     const open    = bets.filter(b => b.status === 'pending');
@@ -1840,7 +1851,7 @@ async function loadMyBets() {
           <div class="bet-pick">${escHtml(b.pick)} <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span></div>
           <div class="bet-meta">${escHtml(b.sport||'')} · $${parseFloat(b.wager).toFixed(2)} wagered · ${formatTimeAgo(b.placed_at)}</div>
         </div>
-        <div class="bet-result positive">+$${parseFloat(b.potential_win).toFixed(2)}</div>
+        <div class="bet-result positive">to win $${parseFloat(b.potential_win).toFixed(2)}</div>
       </div>
     `).join('') : '<div class="empty">No open bets.</div>';
 
@@ -1857,7 +1868,8 @@ async function loadMyBets() {
     `).join('') : '<div class="empty">No settled bets yet.</div>';
   } catch(e) {
     console.error('loadMyBets error:', e);
-    document.getElementById('open-bets').innerHTML = '<div class="empty" style="cursor:pointer" onclick="loadMyBets()">Tap to retry</div>';
+    document.getElementById('open-bets').innerHTML = '<div class="empty" style="cursor:pointer" onclick="loadMyBets()">⟳ Tap to retry</div>';
+    document.getElementById('settled-bets').innerHTML = '';
   }
 }
 
@@ -1920,61 +1932,53 @@ async function loadLeaderboard(leagueId) {
   const el = document.getElementById('league-tab-leaderboard');
   el.innerHTML = '<div class="loading">Loading standings...</div>';
   try {
-    // Query 1: members (no join)
-    const { data: members, error: mErr } = await db
-      .from('league_members')
-      .select('user_id, balance, league_id')
-      .eq('league_id', leagueId)
-      .order('balance', { ascending: false });
+    const { data: members, error: mErr } = await dbQuery(() =>
+      db.from('league_members').select('user_id, balance').eq('league_id', leagueId).order('balance', { ascending: false })
+    );
     if (mErr) throw mErr;
     if (!members?.length) { el.innerHTML = '<div class="empty">No members yet.</div>'; return; }
 
-    // Query 2: profiles for those user IDs (cached)
     const userMap = await getProfiles(members.map(m => m.user_id));
 
-    // Query 3: bet stats (no join)
-    const { data: bets } = await db
-      .from('bets')
-      .select('user_id, status, wager, result')
-      .eq('league_id', leagueId);
+    const { data: bets } = await dbQuery(() =>
+      db.from('bets').select('user_id, status, wager').eq('league_id', leagueId)
+    );
 
     const betsByUser = {};
     (bets||[]).forEach(b => {
       if (!betsByUser[b.user_id]) betsByUser[b.user_id] = { won:0, lost:0, pending:0 };
       const s = betsByUser[b.user_id];
-      if (b.status === 'won')      s.won++;
+      if (b.status === 'won') s.won++;
       else if (b.status === 'lost') s.lost++;
-      else                          s.pending++;
+      else s.pending++;
     });
 
     const startBal = parseFloat(currentLeague?.leagues?.bankroll || 1000);
     const rankColors = ['gold','silver','bronze'];
-
     el.innerHTML = members.map((m, i) => {
       const stats = betsByUser[m.user_id] || { won:0, lost:0, pending:0 };
       const bal = parseFloat(m.balance);
-      const change = bal - startBal;
+      const net = bal - startBal;
       const isMe = m.user_id === currentUser.id;
       const username = userMap[m.user_id] || 'Player';
-      const initial = username[0].toUpperCase();
+      const netColor = net > 0 ? 'positive' : net < 0 ? 'negative' : '';
       return `
         <div class="leaderboard-row${isMe ? ' lb-me' : ''}">
           <div class="lb-rank ${rankColors[i] || 'other'}">${i+1}</div>
-          <div class="lb-avatar">${initial}</div>
+          <div class="lb-avatar">${username[0].toUpperCase()}</div>
           <div class="lb-info">
             <div class="lb-name">${escHtml(username)}${isMe ? ' <span style="font-size:10px;color:var(--muted)">(you)</span>' : ''}</div>
             <div class="lb-record">${stats.won}W–${stats.lost}L · ${stats.pending} pending</div>
           </div>
           <div class="lb-bal">
-            <div class="lb-bal-amt">$${bal.toFixed(0)}</div>
-            <div class="lb-bal-change ${change >= 0 ? 'positive' : 'negative'}">${change >= 0 ? '+' : ''}$${Math.abs(change).toFixed(0)}</div>
+            <div class="lb-bal-amt ${netColor}" style="font-size:20px;">${net >= 0 ? '+' : '-'}$${Math.abs(net).toFixed(0)}</div>
+            <div class="lb-bal-change" style="color:var(--muted);">$${bal.toFixed(0)} bal</div>
           </div>
-        </div>
-      `;
+        </div>`;
     }).join('');
   } catch(e) {
     console.error('loadLeaderboard error:', e);
-    el.innerHTML = '<div class="empty" style="cursor:pointer" onclick="loadLeaderboard(\'' + leagueId + '\')">Tap to retry standings</div>';
+    el.innerHTML = `<div class="empty" style="cursor:pointer" onclick="loadLeaderboard('${leagueId}')">⟳ Tap to retry standings</div>`;
   }
 }
 
@@ -1983,31 +1987,56 @@ async function loadActivity(leagueId) {
   const el = document.getElementById('league-tab-activity');
   el.innerHTML = '<div class="loading">Loading activity...</div>';
   try {
-    // Query bets without join
-    const { data: bets, error } = await db
-      .from('bets')
-      .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at')
-      .eq('league_id', leagueId)
-      .order('placed_at', { ascending: false })
-      .limit(50);
+    const { data: bets, error } = await dbQuery(() =>
+      db.from('bets')
+        .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at, game_id')
+        .eq('league_id', leagueId)
+        .order('placed_at', { ascending: false })
+        .limit(50)
+    );
     if (error) throw error;
-
     if (!bets?.length) { el.innerHTML = '<div class="empty">No bets placed yet.</div>'; return; }
 
-    // Get profiles for all unique users
     const userIds = [...new Set(bets.map(b => b.user_id))];
     const userMap = await getProfiles(userIds);
+    const now = new Date();
 
     el.innerHTML = bets.map(b => {
       const username = userMap[b.user_id] || 'Player';
       const initial = username[0].toUpperCase();
       const timeAgo = formatTimeAgo(b.placed_at);
       const isMe = b.user_id === currentUser.id;
+
+      // ── FIX #2: hide bet details before game starts ──
+      // game_id format from Odds API: {sport}_{datetime}_{teams} — we stored placed_at
+      // Hide pick details if bet is still pending AND was placed recently (game likely not started)
+      // We use a simple heuristic: if pending and NOT live (status pending), show masked version
+      // unless it's the current user's own bet
+      const isSettled = b.status !== 'pending';
+      const showDetails = isMe || isSettled;
+
       const resultText = b.status === 'won'
         ? `+$${parseFloat(b.potential_win||0).toFixed(2)}`
         : b.status === 'lost'
         ? `-$${parseFloat(b.wager||0).toFixed(2)}`
         : `$${parseFloat(b.wager||0).toFixed(2)} wagered`;
+
+      if (!showDetails) {
+        // Masked: show sport only, no pick/odds
+        return `
+          <div class="activity-row">
+            <div class="activity-avatar">${initial}</div>
+            <div class="activity-content">
+              <div class="activity-text">
+                <strong>${escHtml(username)}</strong> placed a bet on
+                <strong>${escHtml(b.sport||'a game')}</strong>
+                <span class="activity-badge pending">pending</span>
+              </div>
+              <div class="activity-time">Details revealed when game starts · ${timeAgo}</div>
+            </div>
+          </div>`;
+      }
+
       return `
         <div class="activity-row">
           <div class="activity-avatar">${initial}</div>
@@ -2020,12 +2049,11 @@ async function loadActivity(leagueId) {
             </div>
             <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${timeAgo}</div>
           </div>
-        </div>
-      `;
+        </div>`;
     }).join('');
   } catch(e) {
     console.error('loadActivity error:', e);
-    el.innerHTML = `<div class="empty" style="cursor:pointer" onclick="loadActivity('${leagueId}')">Tap to retry</div>`;
+    el.innerHTML = `<div class="empty" style="cursor:pointer" onclick="loadActivity('${leagueId}')">⟳ Tap to retry</div>`;
   }
 }
 
@@ -2034,38 +2062,101 @@ function renderInvite() {
   if (!currentLeague) return;
   const lg = currentLeague.leagues;
   const el = document.getElementById('league-tab-invite');
+
+  // Calculate end date (Sunday midnight of current week)
+  const now = new Date();
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() + (7 - now.getDay()) % 7 || 7);
+  sunday.setHours(23, 59, 0, 0);
+  const endStr = sunday.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) + ' at midnight';
+
   const shareUrl = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(lg.name)}&pw=${encodeURIComponent(lg.password)}`;
+
+  const copyText = `🏆 Join my BettorsLeague!
+
+League: ${lg.name}
+Password: ${lg.password}
+
+📋 Details:
+• $${lg.buy_in} buy-in
+• $${lg.bankroll||1000} starting bankroll
+• ${lg.payout_structure === 'winner-take-all' ? 'Winner Take All 🥇' : lg.payout_structure}
+• Ends ${endStr}
+
+How to join:
+1. Go to bettorsleague.com
+2. Create an account
+3. Tap Leagues → Join Existing League
+4. Enter league name & password above
+
+${shareUrl}`;
+
   el.innerHTML = `
     <div class="invite-box">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">League Name</div>
-      <div style="font-size:16px;font-weight:600;margin-bottom:12px;">${escHtml(lg.name)}</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Password</div>
+      <!-- League card preview -->
+      <div style="background:var(--dark);border:1px solid var(--border2);border-radius:10px;padding:14px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <div style="width:40px;height:40px;border-radius:8px;background:var(--gold-dim);display:flex;align-items:center;justify-content:center;font-size:22px;">${escHtml(lg.icon||'🏆')}</div>
+          <div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--gold);letter-spacing:1px;">${escHtml(lg.name)}</div>
+            <div style="font-size:11px;color:var(--muted);">bettorsleague.com</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="background:var(--surface2);border-radius:6px;padding:8px;">
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Buy-in</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text);">$${lg.buy_in}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:6px;padding:8px;">
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Bankroll</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text);">$${lg.bankroll||1000}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:6px;padding:8px;">
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Payout</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);">${lg.payout_structure === 'winner-take-all' ? 'Winner Take All' : escHtml(lg.payout_structure)}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:6px;padding:8px;">
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Ends</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);">${endStr}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Password to join</div>
       <div class="invite-code">${escHtml(lg.password)}</div>
-      <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:12px;">Share the league name + password with friends</div>
-      <button class="invite-copy-btn" onclick="copyInvite('${escAttr(lg.name)}','${escAttr(lg.password)}','${escAttr(shareUrl)}')">
-        📋 Copy Invite Link
+
+      <button class="invite-copy-btn" onclick="copyInvite(${JSON.stringify(copyText)})">
+        📋 Copy Invite Message
       </button>
     </div>
-    <div style="padding:0 14px;">
+
+    <div style="padding:0 14px 20px;">
       <div class="sec-title" style="padding:10px 0 6px;">How to Join</div>
-      <div style="font-size:12px;color:var(--muted2);line-height:1.8;padding:8px 0;">
-        1. Go to <strong style="color:var(--text);">bettorsleague.com</strong><br>
-        2. Create an account<br>
-        3. Tap <strong style="color:var(--text);">Leagues → Join Existing League</strong><br>
-        4. Enter name: <strong style="color:var(--gold);">${escHtml(lg.name)}</strong><br>
-        5. Enter password: <strong style="color:var(--gold);">${escHtml(lg.password)}</strong>
+      <div style="font-size:13px;color:var(--muted2);line-height:2;padding:8px 0;">
+        1️⃣ Go to <strong style="color:var(--gold);">bettorsleague.com</strong><br>
+        2️⃣ Create a free account<br>
+        3️⃣ Tap <strong style="color:var(--text);">Leagues → Join Existing League</strong><br>
+        4️⃣ Name: <strong style="color:var(--gold);">${escHtml(lg.name)}</strong> · Password: <strong style="color:var(--gold);">${escHtml(lg.password)}</strong>
       </div>
     </div>
   `;
 }
 
-async function copyInvite(name, pw, url) {
-  const text = `Join my BettorsLeague!\n\nLeague: ${name}\nPassword: ${pw}\n\n${url}`;
+async function copyInvite(text) {
   try {
     await navigator.clipboard.writeText(text);
     showToast('Invite copied! 📋');
   } catch(e) {
-    showToast('Link: ' + url);
+    // Fallback for Safari/mobile
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); showToast('Invite copied! 📋'); }
+    catch(e2) { showToast('Copy failed — screenshot this screen instead'); }
+    document.body.removeChild(ta);
   }
 }
 
