@@ -2278,11 +2278,8 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
       const timeAgo = formatTimeAgo(b.placed_at);
       const isMe = b.user_id === currentUser.id;
       const isSettled = b.status !== 'pending';
-
-      // Reveal details when: it's your own bet, OR bet is settled, OR game has started
-      // game_time is stored as ISO string when bet is placed
-      const gameStarted = b.game_time ? new Date(b.game_time) <= now : false;
-      const showDetails = isMe || isSettled || gameStarted;
+      const isParlay = b.type === 'parlay';
+      const legs = isParlay && b.legs ? (() => { try { return JSON.parse(b.legs); } catch(e) { return null; } })() : null;
 
       const resultText = b.status === 'won'
         ? `+$${parseFloat(b.potential_win||0).toFixed(2)}`
@@ -2290,23 +2287,88 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
         ? `-$${parseFloat(b.wager||0).toFixed(2)}`
         : `$${parseFloat(b.wager||0).toFixed(2)} wagered`;
 
-      if (!showDetails) {
-        const revealTime = b.game_time
-          ? new Date(b.game_time).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', timeZoneName:'short'})
-          : 'game time';
+      // ── COMPETITOR PARLAY: progressive leg reveal ──
+      if (isParlay && legs && !isMe && !isSettled) {
+        const revealedLegs = legs.filter(l => !l.game_time || new Date(l.game_time) <= now);
+        const lockedLegs   = legs.filter(l => l.game_time && new Date(l.game_time) > now);
+        const nextReveal   = lockedLegs.length
+          ? lockedLegs.sort((a,b) => new Date(a.game_time)-new Date(b.game_time))[0]
+          : null;
+        const nextRevealStr = nextReveal
+          ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;">🔒 ${lockedLegs.length} leg${lockedLegs.length>1?'s':''} locked · reveals at ${new Date(nextReveal.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})}</div>`
+          : '';
+
+        if (revealedLegs.length === 0) {
+          const revealTime = nextReveal
+            ? new Date(nextReveal.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
+            : 'game time';
+          return `
+            <div class="activity-row">
+              <div class="activity-avatar">${initial}</div>
+              <div class="activity-content">
+                <div class="activity-text">
+                  <strong>${escHtml(username)}</strong> placed a
+                  <span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;">${legs.length}-LEG PARLAY</span>
+                  <span class="activity-badge pending">locked</span>
+                </div>
+                <div class="activity-time">First leg reveals at ${revealTime} · ${timeAgo}</div>
+              </div>
+            </div>`;
+        }
+
         return `
           <div class="activity-row">
             <div class="activity-avatar">${initial}</div>
             <div class="activity-content">
               <div class="activity-text">
-                <strong>${escHtml(username)}</strong> placed a bet on
-                <strong>${escHtml(b.sport||'a game')}</strong>
-                <span class="activity-badge pending">locked</span>
+                <strong>${escHtml(username)}</strong>
+                <span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin:0 3px;">${legs.length}-LEG PARLAY</span>
+                <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
+                <span class="activity-badge ${b.status}">${b.status}</span>
               </div>
-              <div class="activity-time">Reveals at ${revealTime} · ${timeAgo}</div>
+              ${revealedLegs.map(l => `
+                <div style="font-size:11px;margin-top:3px;padding:3px 6px;background:var(--surface2);border-radius:4px;display:flex;align-items:center;gap:6px;">
+                  <span style="color:var(--green);font-size:9px;font-weight:700;">LIVE</span>
+                  <span style="font-weight:500;">${escHtml(l.pick)}</span>
+                  <span style="color:var(--gold);">${l.odds > 0 ? '+' : ''}${l.odds}</span>
+                </div>`).join('')}
+              ${nextRevealStr}
+              <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${timeAgo}</div>
             </div>
           </div>`;
       }
+
+      // ── STRAIGHT BET (competitor): reveal at game time ──
+      if (!isMe && !isSettled && !isParlay) {
+        const gameStarted = b.game_time ? new Date(b.game_time) <= now : false;
+        if (!gameStarted) {
+          const revealTime = b.game_time
+            ? new Date(b.game_time).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', timeZoneName:'short'})
+            : 'game time';
+          return `
+            <div class="activity-row">
+              <div class="activity-avatar">${initial}</div>
+              <div class="activity-content">
+                <div class="activity-text">
+                  <strong>${escHtml(username)}</strong> placed a bet on
+                  <strong>${escHtml(b.sport||'a game')}</strong>
+                  <span class="activity-badge pending">locked</span>
+                </div>
+                <div class="activity-time">Reveals at ${revealTime} · ${timeAgo}</div>
+              </div>
+            </div>`;
+        }
+      }
+
+      // ── OWN BET or revealed: show all details ──
+      const ownParlayLegs = isParlay && legs ? `
+        <div style="margin-top:4px;">
+          ${legs.map(l => `
+            <div style="font-size:11px;padding:3px 6px;background:var(--surface2);border-radius:4px;margin-top:2px;display:flex;align-items:center;gap:6px;">
+              <span style="font-weight:500;">${escHtml(l.pick)}</span>
+              <span style="color:var(--gold)">${l.odds > 0 ? '+' : ''}${l.odds}</span>
+            </div>`).join('')}
+        </div>` : '';
 
       return `
         <div class="activity-row">
@@ -2314,11 +2376,12 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
           <div class="activity-content">
             <div class="activity-text">
               <strong>${escHtml(isMe ? 'You' : username)}</strong> bet
-              ${b.type === 'parlay' ? '<span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:3px;">PARLAY</span>' : ''}
+              ${isParlay ? '<span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:3px;">PARLAY</span>' : ''}
               <strong>${escHtml(b.pick)}</strong>
               <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
               <span class="activity-badge ${b.status}">${b.status}</span>
             </div>
+            ${ownParlayLegs}
             <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${timeAgo}</div>
           </div>
         </div>`;
