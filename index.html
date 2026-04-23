@@ -2001,6 +2001,16 @@ function switchLeagueTab(tab, btn) {
   if (tab === 'invite')      renderInvite();
 }
 
+// Tap a leaderboard row → switch to Activity tab filtered to that player
+function viewPlayerActivity(userId, username) {
+  const lid = currentLeague?.league_id;
+  if (!lid) return;
+  // Switch to Activity tab
+  document.querySelectorAll('#panel-league-detail .nav-btn').forEach((b,i) => b.classList.toggle('active', i===1));
+  document.querySelectorAll('.league-tab').forEach((t,i) => t.classList.toggle('active', i===1));
+  loadActivity(lid, userId, username);
+}
+
 // ── LEADERBOARD ──
 async function loadLeaderboard(leagueId) {
   const el = document.getElementById('league-tab-leaderboard');
@@ -2059,12 +2069,12 @@ async function loadLeaderboard(leagueId) {
         : `${settledNet > 0 ? '+' : '-'}$${Math.abs(settledNet).toFixed(0)}`;
 
       return `
-        <div class="leaderboard-row${isMe ? ' lb-me' : ''}">
+        <div class="leaderboard-row${isMe ? ' lb-me' : ''}" style="cursor:pointer;" onclick="viewPlayerActivity('${m.user_id}','${escAttr(username)}')">
           <div class="lb-rank ${rankColors[i] || 'other'}">${i+1}</div>
           <div class="lb-avatar">${username[0].toUpperCase()}</div>
           <div class="lb-info">
             <div class="lb-name">${escHtml(username)}${isMe ? ' <span style="font-size:10px;color:var(--muted)">(you)</span>' : ''}</div>
-            <div class="lb-record">${stats.won}W–${stats.lost}L · ${stats.pending} pending</div>
+            <div class="lb-record">${stats.won}W–${stats.lost}L · ${stats.pending} pending · <span style="color:var(--gold);font-size:10px;">view bets ›</span></div>
           </div>
           <div class="lb-bal">
             <div class="lb-bal-amt ${netColor}" style="font-size:20px;">${netStr}</div>
@@ -2079,7 +2089,7 @@ async function loadLeaderboard(leagueId) {
 }
 
 // ── ACTIVITY FEED ──
-async function loadActivity(leagueId) {
+async function loadActivity(leagueId, filterUserId = null, filterUsername = null) {
   const el = document.getElementById('league-tab-activity');
   el.innerHTML = '<div class="loading">Loading activity...</div>';
   try {
@@ -2109,7 +2119,25 @@ async function loadActivity(leagueId) {
     const userMap = await getProfiles(userIds);
     const now = new Date();
 
-    el.innerHTML = bets.map(b => {
+    // Filter to specific player if tapped from leaderboard
+    const displayBets = filterUserId ? bets.filter(b => b.user_id === filterUserId) : bets;
+
+    // Sticky back button when viewing a specific player
+    const headerHtml = filterUserId ? `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface2);position:sticky;top:0;z-index:1;">
+        <button onclick="loadActivity('${leagueId}')" style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:0 4px 0 0;line-height:1;">‹</button>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;">${escHtml(filterUsername)}'s Bets</div>
+          <div style="font-size:10px;color:var(--muted);">${displayBets.length} bet${displayBets.length!==1?'s':''} · tap ‹ for all activity</div>
+        </div>
+      </div>` : '';
+
+    if (!displayBets.length) {
+      el.innerHTML = headerHtml + `<div class="empty">${escHtml(filterUsername || 'No one')} hasn't placed any bets yet.</div>`;
+      return;
+    }
+
+    el.innerHTML = headerHtml + displayBets.map(b => {
       const username = userMap[b.user_id] || 'Player';
       const initial = username[0].toUpperCase();
       const timeAgo = formatTimeAgo(b.placed_at);
