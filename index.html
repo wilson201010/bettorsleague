@@ -2437,9 +2437,11 @@ How to join:
 
 ${shareUrl}`;
 
+  // Store invite text in a global so the button onclick doesn't need to pass it through HTML attribute
+  window._pendingInviteText = copyText;
+
   el.innerHTML = `
     <div class="invite-box">
-      <!-- League card preview -->
       <div style="background:var(--dark);border:1px solid var(--border2);border-radius:10px;padding:14px;margin-bottom:14px;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
           <div style="width:40px;height:40px;border-radius:8px;background:var(--gold-dim);display:flex;align-items:center;justify-content:center;font-size:22px;">${escHtml(lg.icon||'🏆')}</div>
@@ -2471,7 +2473,7 @@ ${shareUrl}`;
       <div style="font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Password to join</div>
       <div class="invite-code">${escHtml(lg.password)}</div>
 
-      <button class="invite-copy-btn" onclick="copyInvite(${JSON.stringify(copyText)})">
+      <button class="invite-copy-btn" id="invite-copy-btn" onclick="copyInvite()">
         📋 Copy Invite Message
       </button>
     </div>
@@ -2488,21 +2490,32 @@ ${shareUrl}`;
   `;
 }
 
-async function copyInvite(text) {
+async function copyInvite() {
+  const text = window._pendingInviteText;
+  if (!text) { showToast('Nothing to copy', true); return; }
+  const btn = document.getElementById('invite-copy-btn');
   try {
     await navigator.clipboard.writeText(text);
     showToast('Invite copied! 📋');
+    if (btn) btn.textContent = '✓ Copied!';
+    setTimeout(() => { if (btn) btn.textContent = '📋 Copy Invite Message'; }, 2500);
   } catch(e) {
-    // Fallback for Safari/mobile
+    // Safari/mobile fallback — must be synchronous in the click handler
     const ta = document.createElement('textarea');
     ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px;';
     document.body.appendChild(ta);
-    ta.focus(); ta.select();
-    try { document.execCommand('copy'); showToast('Invite copied! 📋'); }
-    catch(e2) { showToast('Copy failed — screenshot this screen instead'); }
+    ta.focus();
+    ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand('copy');
     document.body.removeChild(ta);
+    if (ok) {
+      showToast('Invite copied! 📋');
+      if (btn) btn.textContent = '✓ Copied!';
+      setTimeout(() => { if (btn) btn.textContent = '📋 Copy Invite Message'; }, 2500);
+    } else {
+      showToast('Tap and hold to copy manually', true);
+    }
   }
 }
 
