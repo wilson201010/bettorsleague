@@ -1943,11 +1943,11 @@ function renderSlip() {
         <span style="font-size:11px;color:var(--muted);flex-shrink:0;">Wager $</span>
         <input class="slip-wager-input" type="number" value="${parlayWager}" min="1" style="flex:1;"
           oninput="updateParlayWager(this.value)" />
-        <span style="font-size:12px;color:var(--green);flex-shrink:0;font-weight:600;">Win $${parlayWin.toFixed(2)}</span>
+        <span id="parlay-win-display" style="font-size:12px;color:var(--green);flex-shrink:0;font-weight:600;">Win $${parlayWin.toFixed(2)}</span>
       </div>
       ${leagueSection}
-      <div class="slip-totals"><span>Wager</span><span>$${parlayWager.toFixed(2)}</span></div>
-      <div class="slip-totals"><span>To win</span><span style="color:var(--green);">+$${parlayWin.toFixed(2)}</span></div>
+      <div class="slip-totals"><span>Wager</span><span id="slip-total-wager">$${parlayWager.toFixed(2)}</span></div>
+      <div class="slip-totals"><span>To win</span><span id="slip-total-win" style="color:var(--green);">+$${parlayWin.toFixed(2)}</span></div>
       <button class="place-btn" onclick="placeBets()">Place Parlay</button>
     `;
     return;
@@ -1967,28 +1967,53 @@ function renderSlip() {
             <span style="font-size:11px;color:var(--muted);">$</span>
             <input class="slip-wager-input" type="number" value="${s.wager}" min="1"
               oninput="updateWager(${i},this.value)" />
-            <span class="slip-win">Win $${calcWin(s.wager,s.odds).toFixed(2)}</span>
+            <span class="slip-win" id="slip-win-${i}">Win $${calcWin(s.wager,s.odds).toFixed(2)}</span>
           </div>
         </div>
         <button class="slip-remove" onclick="removeBet(${i})">×</button>
       </div>
     `).join('')}
     ${leagueSection}
-    <div class="slip-totals"><span>Total wager</span><span>$${totalWager.toFixed(2)}</span></div>
-    <div class="slip-totals"><span>To win</span><span>+$${totalWin.toFixed(2)}</span></div>
+    <div class="slip-totals"><span>Total wager</span><span id="slip-total-wager">$${totalWager.toFixed(2)}</span></div>
+    <div class="slip-totals"><span>To win</span><span id="slip-total-win">+$${totalWin.toFixed(2)}</span></div>
     <button class="place-btn" onclick="placeBets()">Place Bets</button>
   `;
 }
 
 function updateWager(i, val) {
-  slipItems[i].wager = parseFloat(val)||0;
-  renderSlip();
+  slipItems[i].wager = parseFloat(val) || 0;
+  // Update just the win amount for this row — don't re-render the whole slip
+  const winEl = document.getElementById(`slip-win-${i}`);
+  if (winEl) winEl.textContent = `Win $${calcWin(slipItems[i].wager, slipItems[i].odds).toFixed(2)}`;
+  // Update summary totals
+  const totalWager = slipItems.reduce((a,s) => a + parseFloat(s.wager||0), 0);
+  const totalWin   = slipItems.reduce((a,s) => a + calcWin(s.wager, s.odds), 0);
+  const summaryEl = document.getElementById('slip-summary');
+  if (summaryEl) summaryEl.textContent = `$${totalWager.toFixed(0)} to win $${totalWin.toFixed(0)}`;
+  const totalWagerEl = document.getElementById('slip-total-wager');
+  const totalWinEl   = document.getElementById('slip-total-win');
+  if (totalWagerEl) totalWagerEl.textContent = `$${totalWager.toFixed(2)}`;
+  if (totalWinEl)   totalWinEl.textContent   = `+$${totalWin.toFixed(2)}`;
 }
 
 function updateParlayWager(val) {
-  // Store wager on all items so we can read it back
-  slipItems.forEach(s => s.parlayWager = parseFloat(val)||0);
-  renderSlip();
+  const wager = parseFloat(val) || 0;
+  slipItems.forEach(s => s.parlayWager = wager);
+  // Update parlay win display without full re-render
+  const allOdds = slipItems.map(s => parseInt(s.odds));
+  const parlayWin = calcParlayWin(wager, allOdds);
+  const winEl = document.getElementById('parlay-win-display');
+  if (winEl) winEl.textContent = `Win $${parlayWin.toFixed(2)}`;
+  const totalWinEl = document.getElementById('slip-total-win');
+  if (totalWinEl) totalWinEl.textContent = `+$${parlayWin.toFixed(2)}`;
+  const totalWagerEl = document.getElementById('slip-total-wager');
+  if (totalWagerEl) totalWagerEl.textContent = `$${wager.toFixed(2)}`;
+  const summaryEl = document.getElementById('slip-summary');
+  if (summaryEl) {
+    const parlayOdds = calcParlayOdds(allOdds);
+    const parlayOddsStr = parlayOdds >= 0 ? `+${parlayOdds}` : `${parlayOdds}`;
+    summaryEl.textContent = `${slipItems.length}-leg parlay ${parlayOddsStr}`;
+  }
 }
 
 function removeBet(i) {
