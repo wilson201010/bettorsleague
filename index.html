@@ -2083,13 +2083,25 @@ async function loadActivity(leagueId) {
   const el = document.getElementById('league-tab-activity');
   el.innerHTML = '<div class="loading">Loading activity...</div>';
   try {
-    const { data: bets, error } = await dbQuery(() =>
+    // Try with game_time first, fall back without it if column doesn't exist yet
+    let bets, error;
+    ({ data: bets, error } = await dbQuery(() =>
       db.from('bets')
         .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at, game_id, game_time')
         .eq('league_id', leagueId)
         .order('placed_at', { ascending: false })
         .limit(50)
-    );
+    ));
+    // If game_time column missing, retry without it
+    if (error && error.message?.includes('game_time')) {
+      ({ data: bets, error } = await dbQuery(() =>
+        db.from('bets')
+          .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at, game_id')
+          .eq('league_id', leagueId)
+          .order('placed_at', { ascending: false })
+          .limit(50)
+      ));
+    }
     if (error) throw error;
     if (!bets?.length) { el.innerHTML = '<div class="empty">No bets placed yet.</div>'; return; }
 
