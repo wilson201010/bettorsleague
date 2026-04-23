@@ -758,8 +758,8 @@ function switchTab(tab, btn) {
 
 // ── DASHBOARD ──
 async function loadDashboard() {
-  await loadLeagues();
-  await loadMyBets();
+  // Run in parallel — don't wait for one before starting the other
+  await Promise.all([loadLeagues(), loadMyBets()]);
   document.getElementById('dash-leagues').textContent = userLeagues.length;
 }
 
@@ -782,12 +782,49 @@ function renderDashLeagues() {
 }
 
 // ── LEAGUES ──
+// ── PROFILE CACHE (avoid repeated profile lookups) ──
+const profileCache = {};
+async function getProfiles(userIds) {
+  const missing = userIds.filter(id => !profileCache[id]);
+  if (missing.length) {
+    const { data } = await db.from('profiles').select('id, username').in('id', missing);
+    (data||[]).forEach(p => { profileCache[p.id] = p.username; });
+  }
+  return userIds.reduce((acc, id) => { acc[id] = profileCache[id] || 'Player'; return acc; }, {});
+}
+
 async function loadLeagues() {
-  const {data} = await db.from('league_members').select('*, leagues(*)').eq('user_id', currentUser.id);
-  userLeagues = data||[];
-  renderDashLeagues();
-  renderLeagues();
-  renderSlip(); // re-render slip so league select is fresh
+  try {
+    // Split into two queries — faster and more reliable than the joined version
+    const { data: members, error: mErr } = await db
+      .from('league_members')
+      .select('*')
+      .eq('user_id', currentUser.id);
+    if (mErr) throw mErr;
+    if (!members?.length) { userLeagues = []; renderDashLeagues(); renderLeagues(); renderSlip(); return; }
+
+    const leagueIds = members.map(m => m.league_id);
+    const { data: leagues, error: lErr } = await db
+      .from('leagues')
+      .select('*')
+      .in('id', leagueIds);
+    if (lErr) throw lErr;
+
+    const leagueMap = {};
+    (leagues||[]).forEach(l => { leagueMap[l.id] = l; });
+
+    userLeagues = members.map(m => ({ ...m, leagues: leagueMap[m.league_id] || {} }));
+    renderDashLeagues();
+    renderLeagues();
+    renderSlip();
+  } catch(e) {
+    console.error('loadLeagues error:', e);
+    // Show empty state rather than infinite loading
+    userLeagues = [];
+    renderDashLeagues();
+    renderLeagues();
+    renderSlip();
+  }
 }
 
 function renderLeagues() {
@@ -1777,39 +1814,51 @@ async function placeBets() {
 
 // ── MY BETS ──
 async function loadMyBets() {
-  const { data } = await db.from('bets').select('*').eq('user_id', currentUser.id).order('placed_at', { ascending: false });
-  const bets     = data || [];
-  const open     = bets.filter(b => b.status === 'pending');
-  const settled  = bets.filter(b => b.status !== 'pending');
-  const wins     = settled.filter(b => b.status === 'won').length;
-  const losses   = settled.filter(b => b.status === 'lost').length;
+  try {
+    const { data, error } = await db
+      .from('bets')
+      .select('id, pick, odds, sport, wager, potential_win, status, result, placed_at, league_id')
+      .eq('user_id', currentUser.id)
+      .order('placed_at', { ascending: false })
+      .limit(100);
 
-  document.getElementById('dash-record').textContent = `${wins}-${losses}`;
-  document.getElementById('dash-open').textContent   = open.length;
+    if (error) throw error;
+    const bets    = data || [];
+    const open    = bets.filter(b => b.status === 'pending');
+    const settled = bets.filter(b => b.status !== 'pending');
+    const wins    = settled.filter(b => b.status === 'won').length;
+    const losses  = settled.filter(b => b.status === 'lost').length;
 
-  const openEl = document.getElementById('open-bets');
-  openEl.innerHTML = open.length ? open.map(b => `
-    <div class="bet-row">
-      <div class="bet-dot pending"></div>
-      <div class="bet-info">
-        <div class="bet-pick">${escHtml(b.pick)} <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span></div>
-        <div class="bet-meta">${escHtml(b.sport)} · $${parseFloat(b.wager).toFixed(2)} wagered</div>
+    document.getElementById('dash-record').textContent = `${wins}-${losses}`;
+    document.getElementById('dash-open').textContent   = open.length;
+
+    const openEl = document.getElementById('open-bets');
+    openEl.innerHTML = open.length ? open.map(b => `
+      <div class="bet-row">
+        <div class="bet-dot pending"></div>
+        <div class="bet-info">
+          <div class="bet-pick">${escHtml(b.pick)} <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span></div>
+          <div class="bet-meta">${escHtml(b.sport||'')} · $${parseFloat(b.wager).toFixed(2)} wagered · ${formatTimeAgo(b.placed_at)}</div>
+        </div>
+        <div class="bet-result positive">+$${parseFloat(b.potential_win).toFixed(2)}</div>
       </div>
-      <div class="bet-result positive">+$${parseFloat(b.potential_win).toFixed(2)}</div>
-    </div>
-  `).join('') : '<div class="empty">No open bets.</div>';
+    `).join('') : '<div class="empty">No open bets.</div>';
 
-  const settledEl = document.getElementById('settled-bets');
-  settledEl.innerHTML = settled.length ? settled.map(b => `
-    <div class="bet-row">
-      <div class="bet-dot ${escHtml(b.status)}"></div>
-      <div class="bet-info">
-        <div class="bet-pick">${escHtml(b.pick)} <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span></div>
-        <div class="bet-meta">${escHtml(b.sport)} · $${parseFloat(b.wager).toFixed(2)} wagered</div>
+    const settledEl = document.getElementById('settled-bets');
+    settledEl.innerHTML = settled.length ? settled.map(b => `
+      <div class="bet-row">
+        <div class="bet-dot ${escHtml(b.status)}"></div>
+        <div class="bet-info">
+          <div class="bet-pick">${escHtml(b.pick)} <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span></div>
+          <div class="bet-meta">${escHtml(b.sport||'')} · $${parseFloat(b.wager).toFixed(2)} wagered</div>
+        </div>
+        <div class="bet-result ${parseFloat(b.result||0) >= 0 ? 'positive' : 'negative'}">${parseFloat(b.result||0) >= 0 ? '+' : ''}$${Math.abs(parseFloat(b.result||0)).toFixed(2)}</div>
       </div>
-      <div class="bet-result ${parseFloat(b.result) >= 0 ? 'positive' : 'negative'}">${parseFloat(b.result) >= 0 ? '+' : ''}$${Math.abs(parseFloat(b.result)).toFixed(2)}</div>
-    </div>
-  `).join('') : '<div class="empty">No settled bets this week.</div>';
+    `).join('') : '<div class="empty">No settled bets yet.</div>';
+  } catch(e) {
+    console.error('loadMyBets error:', e);
+    document.getElementById('open-bets').innerHTML = '<div class="empty" style="cursor:pointer" onclick="loadMyBets()">Tap to retry</div>';
+  }
 }
 
 // ── SCORES API SPORT KEY MAP ──
@@ -1871,27 +1920,30 @@ async function loadLeaderboard(leagueId) {
   const el = document.getElementById('league-tab-leaderboard');
   el.innerHTML = '<div class="loading">Loading standings...</div>';
   try {
-    // Get all members with their profiles
-    const { data: members } = await db
+    // Query 1: members (no join)
+    const { data: members, error: mErr } = await db
       .from('league_members')
-      .select('*, profiles(username)')
+      .select('user_id, balance, league_id')
       .eq('league_id', leagueId)
       .order('balance', { ascending: false });
-
+    if (mErr) throw mErr;
     if (!members?.length) { el.innerHTML = '<div class="empty">No members yet.</div>'; return; }
 
-    // Get bet stats per user for this league
+    // Query 2: profiles for those user IDs (cached)
+    const userMap = await getProfiles(members.map(m => m.user_id));
+
+    // Query 3: bet stats (no join)
     const { data: bets } = await db
       .from('bets')
-      .select('user_id, status, wager, potential_win, result')
+      .select('user_id, status, wager, result')
       .eq('league_id', leagueId);
 
     const betsByUser = {};
     (bets||[]).forEach(b => {
-      if (!betsByUser[b.user_id]) betsByUser[b.user_id] = { won:0, lost:0, pending:0, profit:0 };
+      if (!betsByUser[b.user_id]) betsByUser[b.user_id] = { won:0, lost:0, pending:0 };
       const s = betsByUser[b.user_id];
-      if (b.status === 'won')     { s.won++;     s.profit += parseFloat(b.result||0); }
-      else if (b.status === 'lost') { s.lost++;  s.profit -= parseFloat(b.wager||0); }
+      if (b.status === 'won')      s.won++;
+      else if (b.status === 'lost') s.lost++;
       else                          s.pending++;
     });
 
@@ -1899,11 +1951,11 @@ async function loadLeaderboard(leagueId) {
     const rankColors = ['gold','silver','bronze'];
 
     el.innerHTML = members.map((m, i) => {
-      const stats = betsByUser[m.user_id] || { won:0, lost:0, pending:0, profit:0 };
+      const stats = betsByUser[m.user_id] || { won:0, lost:0, pending:0 };
       const bal = parseFloat(m.balance);
       const change = bal - startBal;
       const isMe = m.user_id === currentUser.id;
-      const username = m.profiles?.username || 'Player';
+      const username = userMap[m.user_id] || 'Player';
       const initial = username[0].toUpperCase();
       return `
         <div class="leaderboard-row${isMe ? ' lb-me' : ''}">
@@ -1915,14 +1967,14 @@ async function loadLeaderboard(leagueId) {
           </div>
           <div class="lb-bal">
             <div class="lb-bal-amt">$${bal.toFixed(0)}</div>
-            <div class="lb-bal-change ${change >= 0 ? 'positive' : 'negative'}">${change >= 0 ? '+' : ''}$${change.toFixed(0)}</div>
+            <div class="lb-bal-change ${change >= 0 ? 'positive' : 'negative'}">${change >= 0 ? '+' : ''}$${Math.abs(change).toFixed(0)}</div>
           </div>
         </div>
       `;
     }).join('');
   } catch(e) {
     console.error('loadLeaderboard error:', e);
-    el.innerHTML = '<div class="empty">Could not load standings.</div>';
+    el.innerHTML = '<div class="empty" style="cursor:pointer" onclick="loadLeaderboard(\'' + leagueId + '\')">Tap to retry standings</div>';
   }
 }
 
@@ -1931,17 +1983,23 @@ async function loadActivity(leagueId) {
   const el = document.getElementById('league-tab-activity');
   el.innerHTML = '<div class="loading">Loading activity...</div>';
   try {
-    const { data: bets } = await db
+    // Query bets without join
+    const { data: bets, error } = await db
       .from('bets')
-      .select('*, profiles(username)')
+      .select('id, user_id, pick, odds, sport, wager, potential_win, status, result, placed_at')
       .eq('league_id', leagueId)
       .order('placed_at', { ascending: false })
       .limit(50);
+    if (error) throw error;
 
     if (!bets?.length) { el.innerHTML = '<div class="empty">No bets placed yet.</div>'; return; }
 
+    // Get profiles for all unique users
+    const userIds = [...new Set(bets.map(b => b.user_id))];
+    const userMap = await getProfiles(userIds);
+
     el.innerHTML = bets.map(b => {
-      const username = b.profiles?.username || 'Player';
+      const username = userMap[b.user_id] || 'Player';
       const initial = username[0].toUpperCase();
       const timeAgo = formatTimeAgo(b.placed_at);
       const isMe = b.user_id === currentUser.id;
@@ -1960,13 +2018,14 @@ async function loadActivity(leagueId) {
               <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
               <span class="activity-badge ${b.status}">${b.status}</span>
             </div>
-            <div class="activity-time">${escHtml(b.sport)} · ${resultText} · ${timeAgo}</div>
+            <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${timeAgo}</div>
           </div>
         </div>
       `;
     }).join('');
   } catch(e) {
-    el.innerHTML = '<div class="empty">Could not load activity.</div>';
+    console.error('loadActivity error:', e);
+    el.innerHTML = `<div class="empty" style="cursor:pointer" onclick="loadActivity('${leagueId}')">Tap to retry</div>`;
   }
 }
 
