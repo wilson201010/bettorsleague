@@ -333,8 +333,8 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
       <button class="auth-tab" onclick="switchAuthTab('signup',this)">Create Account</button>
     </div>
     <div class="auth-form active" id="form-login">
-      <div class="auth-field"><label class="auth-label">Email</label><input class="auth-input" type="email" id="login-email" placeholder="you@email.com" /></div>
-      <div class="auth-field"><label class="auth-label">Password</label><input class="auth-input" type="password" id="login-pw" placeholder="••••••••" /></div>
+      <div class="auth-field"><label class="auth-label">Email</label><input class="auth-input" type="email" id="login-email" placeholder="you@email.com" onkeydown="if(event.key==='Enter')signIn()" /></div>
+      <div class="auth-field"><label class="auth-label">Password</label><input class="auth-input" type="password" id="login-pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')signIn()" /></div>
       <button class="auth-btn" onclick="signIn()">Sign In</button>
       <div class="auth-err" id="login-err"></div>
     </div>
@@ -975,6 +975,28 @@ async function fetchOdds() {
 
   const sub = currentSubSport || { label:'All', markets:'h2h,spreads,totals' };
 
+  // ── LEAGUE END DATE FILTER ──
+  // For weekly leagues: end is Sunday at midnight. Filter out games after that.
+  // If user is in multiple leagues, use the soonest end date as the cutoff.
+  const now = new Date();
+  let leagueCutoff = null;
+  if (userLeagues.length) {
+    userLeagues.forEach(l => {
+      const lg = l.leagues;
+      let end = null;
+      if (lg.week_end) {
+        end = new Date(lg.week_end);
+      } else if (lg.league_type === 'weekly' || !lg.league_type) {
+        // Weekly league: ends this Sunday at midnight
+        const sun = new Date(now);
+        sun.setDate(now.getDate() + (7 - now.getDay()) % 7 || 7);
+        sun.setHours(23, 59, 59, 999);
+        end = sun;
+      }
+      if (end && (!leagueCutoff || end < leagueCutoff)) leagueCutoff = end;
+    });
+  }
+
   // Golf: outrights or matchups or top-finish markets
   if (currentSport === 'Golf') {
     if (sub?.isGolfMatchups) await fetchGolfMatchups();
@@ -1050,6 +1072,8 @@ async function fetchOdds() {
           const over     = total?.outcomes?.find(o => o.name==='Over');
           const under    = total?.outcomes?.find(o => o.name==='Under');
           const gt = new Date(game.commence_time);
+          // Skip games that start after league ends
+          if (leagueCutoff && gt > leagueCutoff) return;
           const diffMins = (gt-now)/60000;
           const today = now.toDateString(), tmrw = new Date(now.getTime()+86400000).toDateString();
           let timeStr;
@@ -1062,7 +1086,7 @@ async function fetchOdds() {
             id: game.id, sport: SPORT_NAME_MAP[sportKey]||sportKey,
             home: game.home_team, away: game.away_team,
             isLive: diffMins < 0, time: timeStr, isProp: false,
-            rawTime: game.commence_time, // ISO — used for bet reveal logic
+            rawTime: game.commence_time,
             ml:     { home: dec2am(homeH2H?.price),  away: dec2am(awayH2H?.price) },
             spread: { home: homeSprd ? (homeSprd.point>0?'+':'')+homeSprd.point : 'N/A',
                       away: awaySprd ? (awaySprd.point>0?'+':'')+awaySprd.point : 'N/A',
@@ -1727,9 +1751,33 @@ function renderSlip() {
   const totalWin   = slipItems.reduce((a,s) => a+calcWin(s.wager, s.odds), 0);
   summaryEl.textContent = `$${totalWager.toFixed(0)} to win $${totalWin.toFixed(0)}`;
 
-  const leagueOptions = userLeagues.length
-    ? userLeagues.map(l => `<option value="${l.league_id}">${escHtml(l.leagues.name)} ($${parseFloat(l.balance).toFixed(0)})</option>`).join('')
-    : '<option value="" disabled>No leagues — create one first</option>';
+  // ── Multi-league checkboxes ──
+  let leagueSection = '';
+  if (!userLeagues.length) {
+    leagueSection = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">No leagues — create one first</div>';
+  } else if (userLeagues.length === 1) {
+    // Single league: keep the original dropdown UX
+    const l = userLeagues[0];
+    leagueSection = `
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:5px;">Place in League</div>
+      <select class="slip-league-select" id="slip-league-select">
+        <option value="">Select league...</option>
+        <option value="${l.league_id}" selected>${escHtml(l.leagues.name)} ($${parseFloat(l.balance).toFixed(0)} avail)</option>
+      </select>`;
+  } else {
+    // Multiple leagues: checkboxes
+    leagueSection = `
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">Place in Leagues</div>
+      <div id="slip-league-checks" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;">
+        ${userLeagues.map(l => `
+          <label style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:7px 10px;cursor:pointer;">
+            <input type="checkbox" value="${l.league_id}" class="slip-league-chk" style="accent-color:var(--gold);width:14px;height:14px;" onchange="renderSlip()">
+            <span style="flex:1;font-size:13px;">${escHtml(l.leagues.name)}</span>
+            <span style="font-size:11px;color:var(--muted);">$${parseFloat(l.balance).toFixed(0)} avail</span>
+          </label>
+        `).join('')}
+      </div>`;
+  }
 
   contentEl.innerHTML = `
     ${slipItems.map((s,i) => `
@@ -1746,10 +1794,7 @@ function renderSlip() {
         <button class="slip-remove" onclick="removeBet(${i})">×</button>
       </div>
     `).join('')}
-    <select class="slip-league-select" id="slip-league-select">
-      <option value="">Select league...</option>
-      ${leagueOptions}
-    </select>
+    ${leagueSection}
     <div class="slip-totals"><span>Total wager</span><span>$${totalWager.toFixed(2)}</span></div>
     <div class="slip-totals"><span>To win</span><span>+$${totalWin.toFixed(2)}</span></div>
     <button class="place-btn" onclick="placeBets()">Place Bets</button>
@@ -1771,65 +1816,83 @@ function removeBet(i) {
 async function placeBets() {
   if (!slipItems.length) return;
 
-  // FIX: the select is rendered inside slip-content — read it by the stable ID we assign in renderSlip()
-  const leagueId = document.getElementById('slip-league-select')?.value;
-  if (!leagueId) { showToast('Select a league!', true); return; }
+  // Get selected leagues — either single dropdown or multi checkboxes
+  let selectedLeagueIds = [];
+  const singleSelect = document.getElementById('slip-league-select');
+  if (singleSelect) {
+    if (singleSelect.value) selectedLeagueIds = [singleSelect.value];
+  } else {
+    selectedLeagueIds = Array.from(document.querySelectorAll('.slip-league-chk:checked')).map(c => c.value);
+  }
 
-  const member = userLeagues.find(l => l.league_id === leagueId);
-  const balance = parseFloat(member.balance);
-  const totalWager = slipItems.reduce((a,s) => a + parseFloat(s.wager), 0);
+  if (!selectedLeagueIds.length) { showToast('Select at least one league!', true); return; }
 
-  if (totalWager > balance) { showToast('Insufficient bankroll!', true); return; }
+  // Validate balance for each selected league
+  for (const lid of selectedLeagueIds) {
+    const member = userLeagues.find(l => l.league_id === lid);
+    const balance = parseFloat(member?.balance || 0);
+    const totalWager = slipItems.reduce((a,s) => a + parseFloat(s.wager), 0);
+    if (totalWager > balance) {
+      showToast(`Insufficient balance in ${member?.leagues?.name || 'league'}!`, true);
+      return;
+    }
+  }
 
-  // Disable button to prevent double-tap
   const btn = document.querySelector('.place-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Placing...'; }
 
   try {
-    const inserts = slipItems.map(s => {
-      // Find the game to get its start time
-      const game = allGames.find(g => g.id === s.gameId);
-      // Parse game time from the time string — fallback to placed_at + 6hrs if unknown
-      let gameTime = null;
-      if (game?.rawTime) {
-        gameTime = game.rawTime; // ISO string stored on game object
-      }
-      return {
-        user_id:       currentUser.id,
-        league_id:     leagueId,
-        game_id:       s.gameId,
-        game_time:     gameTime,
-        sport:         s.sport,
-        pick:          s.pick,
-        odds:          parseInt(s.odds),
-        wager:         parseFloat(s.wager),
-        potential_win: parseFloat(calcWin(s.wager, s.odds).toFixed(2)),
-        status:        'pending'
-      };
-    });
+    let totalPlaced = 0;
 
-    const { error } = await db.from('bets').insert(inserts);
-    if (error) {
-      console.error('Bet insert error:', error);
-      showToast('Error placing bets: ' + error.message, true);
-      if (btn) { btn.disabled = false; btn.textContent = 'Place Bets'; }
-      return;
+    for (const leagueId of selectedLeagueIds) {
+      const member = userLeagues.find(l => l.league_id === leagueId);
+      const balance = parseFloat(member.balance);
+      const totalWager = slipItems.reduce((a,s) => a + parseFloat(s.wager), 0);
+
+      const inserts = slipItems.map(s => {
+        const game = allGames.find(g => g.id === s.gameId);
+        return {
+          user_id:       currentUser.id,
+          league_id:     leagueId,
+          game_id:       s.gameId,
+          game_time:     game?.rawTime || null,
+          sport:         s.sport,
+          pick:          s.pick,
+          odds:          parseInt(s.odds),
+          wager:         parseFloat(s.wager),
+          potential_win: parseFloat(calcWin(s.wager, s.odds).toFixed(2)),
+          status:        'pending'
+        };
+      });
+
+      const { error } = await db.from('bets').insert(inserts);
+      if (error) {
+        console.error('Bet insert error:', error);
+        showToast('Error in ' + member.leagues.name + ': ' + error.message, true);
+        continue;
+      }
+
+      await db.from('league_members')
+        .update({ balance: balance - totalWager })
+        .eq('league_id', leagueId)
+        .eq('user_id', currentUser.id);
+
+      totalPlaced++;
     }
 
-    // Deduct balance
-    await db.from('league_members')
-      .update({ balance: balance - totalWager })
-      .eq('league_id', leagueId)
-      .eq('user_id', currentUser.id);
-
-    slipItems = [];
-    renderGames();
-    renderSlip();
-    await loadLeagues();
-    showToast(`${inserts.length} bet${inserts.length > 1 ? 's' : ''} placed! Good luck. 🎯`);
+    if (totalPlaced > 0) {
+      slipItems = [];
+      renderGames();
+      renderSlip();
+      await loadLeagues();
+      const leagueWord = totalPlaced > 1 ? `${totalPlaced} leagues` : selectedLeagueIds.length === 1 ? userLeagues.find(l=>l.league_id===selectedLeagueIds[0])?.leagues?.name : 'league';
+      showToast(`Bets placed in ${leagueWord}! Good luck. 🎯`);
+    }
   } catch(e) {
     console.error('placeBets exception:', e);
     showToast('Unexpected error: ' + e.message, true);
+    if (btn) { btn.disabled = false; btn.textContent = 'Place Bets'; }
+  } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Place Bets'; }
   }
 }
