@@ -1334,7 +1334,7 @@ async function fetchPerEventOdds(markets, isProps) {
     const events = await evRes.json();
     const now = new Date();
     const upcoming = events
-      .filter(e => new Date(e.commence_time) > new Date(now - 4*60*60*1000))
+      .filter(e => new Date(e.commence_time) > now) // upcoming only — no live games
       .slice(0, isProps ? 6 : 15);
     if (!upcoming.length) return;
 
@@ -1492,9 +1492,8 @@ function renderGames() {
   // Separate props from regular games
   const golf    = allGames.filter(g => g.isGolf);
   const props   = allGames.filter(g => g.isProp);
-  const regular = allGames.filter(g => !g.isProp && !g.isGolf);
-  const live     = regular.filter(g => g.isLive);
-  const upcoming = regular.filter(g => !g.isLive);
+  const regular  = allGames.filter(g => !g.isProp && !g.isGolf && !g.isLive); // upcoming only
+  const upcoming = regular;
 
   let html = '';
 
@@ -1664,12 +1663,8 @@ function renderGames() {
     return h;
   };
 
-  if (live.length) {
-    html += `<div class="sec-title" style="color:var(--green);border-color:rgba(34,197,94,0.3);">Live Now (${live.length})</div>`;
-    html += renderGroup(live, true);
-  }
   if (upcoming.length) {
-    html += `<div class="sec-title" style="margin-top:${live.length?'8px':'0'};">Upcoming (${upcoming.length})</div>`;
+    html += `<div class="sec-title">Upcoming (${upcoming.length})</div>`;
     html += renderGroup(upcoming, false);
   }
   el.innerHTML = html;
