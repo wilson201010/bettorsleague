@@ -2438,18 +2438,32 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
           <span style="color:var(--gold);flex-shrink:0;min-width:36px;text-align:right;">${l.odds > 0 ? '+' : ''}${l.odds}</span>
         </div>`;
 
-      // ── COMPETITOR PARLAY: progressive leg reveal ──
-      if (isParlay && legs && !isMe && !isSettled) {
-        const revealedLegs = legs.filter(l => !l.game_time || new Date(l.game_time) <= now);
-        const lockedLegs   = legs.filter(l => l.game_time && new Date(l.game_time) > now);
-        const nextReveal   = lockedLegs.length
-          ? lockedLegs.sort((a,b) => new Date(a.game_time)-new Date(b.game_time))[0]
-          : null;
-        const nextRevealStr = nextReveal
-          ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;">🔒 ${lockedLegs.length} leg${lockedLegs.length>1?'s':''} locked · reveals at ${new Date(nextReveal.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})}</div>`
-          : '';
+      // ── ALL PARLAYS: show leg details (progressive reveal if pending competitor, full if settled or own) ──
+      if (isParlay && legs) {
+        const parlayLegsHtml = (() => {
+          if (isMe || isSettled) {
+            // Own bet OR settled — always show all legs
+            return legs.map(l => legRow(l, true)).join('');
+          }
+          // Competitor pending parlay — progressive reveal
+          const revealedLegs = legs.filter(l => !l.game_time || new Date(l.game_time) <= now);
+          const lockedLegs   = legs.filter(l => l.game_time && new Date(l.game_time) > now);
+          const nextReveal   = lockedLegs.length
+            ? lockedLegs.sort((a,b) => new Date(a.game_time)-new Date(b.game_time))[0]
+            : null;
 
-        if (revealedLegs.length === 0) {
+          if (revealedLegs.length === 0) return null; // fully locked, handled below
+
+          const nextRevealStr = nextReveal
+            ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;">🔒 ${lockedLegs.length} leg${lockedLegs.length>1?'s':''} locked · reveals at ${new Date(nextReveal.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})}</div>`
+            : '';
+          return revealedLegs.map(l => legRow(l, true)).join('') + nextRevealStr;
+        })();
+
+        // Fully locked pending competitor parlay
+        if (parlayLegsHtml === null) {
+          const nextReveal = legs.filter(l => l.game_time && new Date(l.game_time) > now)
+            .sort((a,b) => new Date(a.game_time)-new Date(b.game_time))[0];
           const revealTime = nextReveal
             ? new Date(nextReveal.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
             : 'game time';
@@ -2472,13 +2486,15 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
             <div class="activity-avatar">${initial}</div>
             <div class="activity-content">
               <div class="activity-text">
-                <strong>${escHtml(username)}</strong>
+                <strong>${escHtml(isMe ? 'You' : username)}</strong>
+                ${isMe ? 'bet' : ''}
                 <span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin:0 3px;">${legs.length}-LEG PARLAY</span>
                 <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
                 <span class="activity-badge ${b.status}">${b.status}</span>
               </div>
-              ${revealedLegs.map(l => legRow(l, true)).join('')}
-              ${nextRevealStr}
+              <div style="margin-top:4px;border-left:2px solid var(--gold);padding-left:8px;">
+                ${parlayLegsHtml}
+              </div>
               <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
             </div>
           </div>`;
@@ -2508,23 +2524,16 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
       }
 
       // ── OWN BET or revealed: show all details with per-leg status ──
-      const ownParlayLegs = isParlay && legs ? `
-        <div style="margin-top:5px;border-left:2px solid var(--gold);padding-left:8px;">
-          ${legs.map(l => legRow(l, false)).join('')}
-        </div>` : '';
-
       return `
         <div class="activity-row">
           <div class="activity-avatar">${initial}</div>
           <div class="activity-content">
             <div class="activity-text">
               <strong>${escHtml(isMe ? 'You' : username)}</strong> bet
-              ${isParlay ? '<span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:3px;">PARLAY</span>' : ''}
               <strong>${escHtml(b.pick)}</strong>
               <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
               <span class="activity-badge ${b.status}">${b.status}</span>
             </div>
-            ${ownParlayLegs}
             <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
           </div>
         </div>`;
