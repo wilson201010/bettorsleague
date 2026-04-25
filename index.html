@@ -2419,15 +2419,15 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
         ? `-$${parseFloat(b.wager||0).toFixed(2)}`
         : `$${parseFloat(b.wager||0).toFixed(2)} wagered`;
 
-      // Helper: leg status dot + label
+      // Helper: leg status badge (right-aligned)
       const legStatusBadge = (l) => {
-        if (l.result === 'won')  return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;">WON</span>';
-        if (l.result === 'lost') return '<span style="font-size:9px;font-weight:700;color:var(--red);flex-shrink:0;">LOST</span>';
-        if (l.result === 'push') return '<span style="font-size:9px;font-weight:700;color:var(--muted);flex-shrink:0;">PUSH</span>';
+        if (l.result === 'won')  return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;margin-left:auto;">WON ✓</span>';
+        if (l.result === 'lost') return '<span style="font-size:9px;font-weight:700;color:var(--red);flex-shrink:0;margin-left:auto;">LOST ✗</span>';
+        if (l.result === 'push') return '<span style="font-size:9px;font-weight:700;color:var(--muted);flex-shrink:0;margin-left:auto;">PUSH</span>';
         const started = l.game_time ? new Date(l.game_time) <= now : true;
-        if (started) return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;">LIVE</span>';
+        if (started) return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;margin-left:auto;">LIVE</span>';
         const t = l.game_time ? new Date(l.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
-        return `<span style="font-size:9px;color:var(--muted);flex-shrink:0;">${t}</span>`;
+        return `<span style="font-size:9px;color:var(--muted);flex-shrink:0;margin-left:auto;">${t}</span>`;
       };
 
       // ── COMPETITOR PARLAY: progressive leg reveal ──
@@ -2471,9 +2471,9 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               </div>
               ${revealedLegs.map(l => `
                 <div style="font-size:11px;margin-top:3px;padding:3px 6px;background:var(--surface2);border-radius:4px;display:flex;align-items:center;gap:6px;">
-                  ${legStatusBadge(l)}
                   <span style="font-weight:500;flex:1;">${escHtml(l.pick)}</span>
                   <span style="color:var(--gold);">${l.odds > 0 ? '+' : ''}${l.odds}</span>
+                  ${legStatusBadge(l)}
                 </div>`).join('')}
               ${nextRevealStr}
               <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
@@ -2514,10 +2514,10 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               : '';
             return `
               <div style="font-size:11px;padding:4px 0;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);">
-                ${legStatusBadge(l)}
                 <span style="font-weight:500;flex:1;">${escHtml(l.pick)}</span>
                 <span style="color:var(--gold);flex-shrink:0;">${l.odds > 0 ? '+' : ''}${l.odds}</span>
-                ${gameTime ? `<span style="color:var(--muted);font-size:10px;flex-shrink:0;">${gameTime}</span>` : ''}
+                ${gameTime && !l.result ? `<span style="color:var(--muted);font-size:10px;flex-shrink:0;">${gameTime}</span>` : ''}
+                ${legStatusBadge(l)}
               </div>`;
           }).join('')}
         </div>` : '';
@@ -2665,8 +2665,13 @@ async function copyInvite() {
 async function autoGradeBets() {
   if (!currentUser) return;
   try {
+    // Get all league IDs the current user belongs to
+    const leagueIds = userLeagues.map(l => l.league_id);
+    if (!leagueIds.length) return;
+
+    // Fetch ALL pending bets across all leagues (everyone's bets, not just current user)
     const { data: pendingBets } = await dbQuery(() =>
-      db.from('bets').select('*').eq('user_id', currentUser.id).eq('status', 'pending')
+      db.from('bets').select('*').in('league_id', leagueIds).eq('status', 'pending')
     );
     if (!pendingBets?.length) return;
 
@@ -2822,7 +2827,7 @@ function safeParseLegs(legsJson) {
   try { return JSON.parse(legsJson) || []; } catch(e) { return []; }
 }
 
-// Settle a bet: update status + result + balance
+// Settle a bet: update status + result + balance (works for any user's bet)
 async function settleBet(bet, result, updatedLegsJson = null) {
   const won = result === 'won';
   const push = result === 'push';
@@ -2833,20 +2838,19 @@ async function settleBet(bet, result, updatedLegsJson = null) {
 
   await db.from('bets').update(updatePayload).eq('id', bet.id);
 
-  // Credit balance on win or push
+  // Credit balance on win or push — use bet.user_id (could be any league member)
   if (won || push) {
     const { data: member } = await db.from('league_members')
       .select('balance')
       .eq('league_id', bet.league_id)
-      .eq('user_id', currentUser.id)
+      .eq('user_id', bet.user_id)
       .single();
     if (member) {
-      // On win: return wager + profit. On push: return wager only.
       const credit = won ? parseFloat(bet.potential_win) + parseFloat(bet.wager) : parseFloat(bet.wager);
       await db.from('league_members')
         .update({ balance: parseFloat(member.balance) + credit })
         .eq('league_id', bet.league_id)
-        .eq('user_id', currentUser.id);
+        .eq('user_id', bet.user_id);
     }
   }
 }
