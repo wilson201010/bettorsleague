@@ -2708,7 +2708,7 @@ async function autoGradeBets() {
     for (const sportKey of sportsNeeded) {
       try {
         const res = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${sportKey}/scores/?apiKey=${ODDS_KEY}&daysFrom=3&dateFormat=iso`
+          `https://api.the-odds-api.com/v4/sports/${sportKey}/scores/?apiKey=${ODDS_KEY}&daysFrom=7&dateFormat=iso`
         );
         if (!res.ok) continue;
         const data = await res.json();
@@ -2844,6 +2844,29 @@ async function autoGradeBets() {
       } else {
         finalWin = calcParlayWin(bet.wager, winningLegs.map(l => l.odds));
         await settleBet({ ...bet, potential_win: finalWin, legs: JSON.stringify(updatedLegs) }, 'won');
+      }
+    }
+
+    // ── Also fix settled parlays with missing leg results ──
+    const { data: settledParlays } = await dbQuery(() =>
+      db.from('bets').select('*').in('league_id', leagueIds)
+        .eq('type', 'parlay').neq('status', 'pending')
+    );
+    for (const bet of (settledParlays || [])) {
+      const legs = safeParseLegs(bet.legs);
+      if (!legs.length) continue;
+      const hasUngraded = legs.some(l => !l.result);
+      if (!hasUngraded) continue;
+      // Fill in missing leg results
+      const updatedLegs = legs.map(l => {
+        if (l.result) return l;
+        const game = findGame(l.gameId, l.sport, l.pick);
+        if (!game) return l;
+        const res = gradePick(l.pick, game);
+        return res ? { ...l, result: res } : l;
+      });
+      if (JSON.stringify(updatedLegs) !== JSON.stringify(legs)) {
+        await db.from('bets').update({ legs: JSON.stringify(updatedLegs) }).eq('id', bet.id);
       }
     }
 
