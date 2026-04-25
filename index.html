@@ -2407,11 +2407,28 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
       const isParlay = b.type === 'parlay';
       const legs = isParlay && b.legs ? (() => { try { return JSON.parse(b.legs); } catch(e) { return null; } })() : null;
 
+      // Format placed date/time
+      const placedDate = b.placed_at
+        ? new Date(b.placed_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' +
+          new Date(b.placed_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
+        : '';
+
       const resultText = b.status === 'won'
         ? `+$${parseFloat(b.potential_win||0).toFixed(2)}`
         : b.status === 'lost'
         ? `-$${parseFloat(b.wager||0).toFixed(2)}`
         : `$${parseFloat(b.wager||0).toFixed(2)} wagered`;
+
+      // Helper: leg status dot + label
+      const legStatusBadge = (l) => {
+        if (l.result === 'won')  return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;">WON</span>';
+        if (l.result === 'lost') return '<span style="font-size:9px;font-weight:700;color:var(--red);flex-shrink:0;">LOST</span>';
+        if (l.result === 'push') return '<span style="font-size:9px;font-weight:700;color:var(--muted);flex-shrink:0;">PUSH</span>';
+        const started = l.game_time ? new Date(l.game_time) <= now : true;
+        if (started) return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;">LIVE</span>';
+        const t = l.game_time ? new Date(l.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
+        return `<span style="font-size:9px;color:var(--muted);flex-shrink:0;">${t}</span>`;
+      };
 
       // ── COMPETITOR PARLAY: progressive leg reveal ──
       if (isParlay && legs && !isMe && !isSettled) {
@@ -2437,7 +2454,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
                   <span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;">${legs.length}-LEG PARLAY</span>
                   <span class="activity-badge pending">locked</span>
                 </div>
-                <div class="activity-time">First leg reveals at ${revealTime} · ${timeAgo}</div>
+                <div class="activity-time">First leg reveals at ${revealTime} · ${placedDate}</div>
               </div>
             </div>`;
         }
@@ -2454,12 +2471,12 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               </div>
               ${revealedLegs.map(l => `
                 <div style="font-size:11px;margin-top:3px;padding:3px 6px;background:var(--surface2);border-radius:4px;display:flex;align-items:center;gap:6px;">
-                  <span style="color:var(--green);font-size:9px;font-weight:700;">LIVE</span>
-                  <span style="font-weight:500;">${escHtml(l.pick)}</span>
+                  ${legStatusBadge(l)}
+                  <span style="font-weight:500;flex:1;">${escHtml(l.pick)}</span>
                   <span style="color:var(--gold);">${l.odds > 0 ? '+' : ''}${l.odds}</span>
                 </div>`).join('')}
               ${nextRevealStr}
-              <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${timeAgo}</div>
+              <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
             </div>
           </div>`;
       }
@@ -2468,8 +2485,9 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
       if (!isMe && !isSettled && !isParlay) {
         const gameStarted = b.game_time ? new Date(b.game_time) <= now : false;
         if (!gameStarted) {
-          const revealTime = b.game_time
-            ? new Date(b.game_time).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', timeZoneName:'short'})
+          const gameDateTime = b.game_time
+            ? new Date(b.game_time).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) + ' ' +
+              new Date(b.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
             : 'game time';
           return `
             <div class="activity-row">
@@ -2480,29 +2498,26 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
                   <strong>${escHtml(b.sport||'a game')}</strong>
                   <span class="activity-badge pending">locked</span>
                 </div>
-                <div class="activity-time">Reveals at ${revealTime} · ${timeAgo}</div>
+                <div class="activity-time">Reveals ${gameDateTime} · placed ${placedDate}</div>
               </div>
             </div>`;
         }
       }
 
-      // ── OWN BET or revealed: show all details ──
+      // ── OWN BET or revealed: show all details with per-leg status ──
       const ownParlayLegs = isParlay && legs ? `
         <div style="margin-top:5px;border-left:2px solid var(--gold);padding-left:8px;">
           ${legs.map(l => {
-            const legStarted = l.game_time ? new Date(l.game_time) <= now : true;
-            const statusDot = legStarted
-              ? '<span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;flex-shrink:0;"></span>'
-              : '<span style="width:6px;height:6px;border-radius:50%;background:var(--gold);display:inline-block;flex-shrink:0;"></span>';
             const gameTime = l.game_time
-              ? new Date(l.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
+              ? new Date(l.game_time).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' +
+                new Date(l.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
               : '';
             return `
-              <div style="font-size:11px;padding:3px 0;display:flex;align-items:center;gap:6px;">
-                ${statusDot}
+              <div style="font-size:11px;padding:4px 0;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);">
+                ${legStatusBadge(l)}
                 <span style="font-weight:500;flex:1;">${escHtml(l.pick)}</span>
                 <span style="color:var(--gold);flex-shrink:0;">${l.odds > 0 ? '+' : ''}${l.odds}</span>
-                ${!legStarted && gameTime ? `<span style="color:var(--muted);font-size:10px;flex-shrink:0;">${gameTime}</span>` : ''}
+                ${gameTime ? `<span style="color:var(--muted);font-size:10px;flex-shrink:0;">${gameTime}</span>` : ''}
               </div>`;
           }).join('')}
         </div>` : '';
@@ -2519,7 +2534,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               <span class="activity-badge ${b.status}">${b.status}</span>
             </div>
             ${ownParlayLegs}
-            <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${timeAgo}</div>
+            <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
           </div>
         </div>`;
     }).join('');
@@ -2681,16 +2696,30 @@ async function autoGradeBets() {
       } catch(e) { console.warn('Scores fetch error', sportKey, e); }
     }
 
-    // Helper: find game in scores
-    const findGame = (gameId, sport) => {
+    // Helper: find game in scores — try ID first, then fuzzy team name match
+    const findGame = (gameId, sport, pick) => {
       const key = SCORES_SPORT_MAP[sport];
       if (!key || !scoresByKey[key]) return null;
-      return scoresByKey[key].find(g => g.id === gameId) || null;
+      const games = scoresByKey[key];
+
+      // 1. Exact ID match
+      const exact = games.find(g => g.id === gameId);
+      if (exact) return exact;
+
+      // 2. Fuzzy: extract team name from pick and match against scores
+      if (!pick) return null;
+      const pickLower = pick.toLowerCase().replace(/ ml$| [+-]\d.*$/, '').trim();
+      return games.find(g =>
+        g.home_team.toLowerCase().includes(pickLower) ||
+        g.away_team.toLowerCase().includes(pickLower) ||
+        pickLower.includes(g.home_team.toLowerCase().split(' ').pop()) ||
+        pickLower.includes(g.away_team.toLowerCase().split(' ').pop())
+      ) || null;
     };
 
     // ── Grade straight bets ──
     for (const bet of straightBets) {
-      const game = findGame(bet.game_id, bet.sport);
+      const game = findGame(bet.game_id, bet.sport, bet.pick);
       if (!game) continue;
       const result = gradePick(bet.pick, game);
       if (!result) continue;
@@ -2707,7 +2736,7 @@ async function autoGradeBets() {
       let allSettled = true;
 
       for (const leg of legs) {
-        const game = findGame(leg.gameId, leg.sport);
+        const game = findGame(leg.gameId, leg.sport, leg.pick);
         if (!game) {
           // Game not done yet — parlay still pending
           allSettled = false;
