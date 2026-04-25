@@ -2439,8 +2439,11 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
         </div>`;
 
       // ── ALL PARLAYS: show leg details (progressive reveal if pending competitor, full if settled or own) ──
-      if (isParlay && legs) {
+      if (isParlay) {
+        // Always show parlay header — legs may be null for older bets
         const parlayLegsHtml = (() => {
+          if (!legs || !legs.length) return null; // no legs data available
+
           if (isMe || isSettled) {
             // Own bet OR settled — always show all legs
             return legs.map(l => legRow(l, true)).join('');
@@ -2460,9 +2463,9 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
           return revealedLegs.map(l => legRow(l, true)).join('') + nextRevealStr;
         })();
 
-        // Fully locked pending competitor parlay
-        if (parlayLegsHtml === null) {
-          const nextReveal = legs.filter(l => l.game_time && new Date(l.game_time) > now)
+        // Fully locked pending competitor parlay OR no legs data
+        if (parlayLegsHtml === null && !isSettled && !isMe) {
+          const nextReveal = legs?.filter(l => l.game_time && new Date(l.game_time) > now)
             .sort((a,b) => new Date(a.game_time)-new Date(b.game_time))[0];
           const revealTime = nextReveal
             ? new Date(nextReveal.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
@@ -2473,7 +2476,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               <div class="activity-content">
                 <div class="activity-text">
                   <strong>${escHtml(username)}</strong> placed a
-                  <span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;">${legs.length}-LEG PARLAY</span>
+                  <span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;">${(legs?.length)||'?'}-LEG PARLAY</span>
                   <span class="activity-badge pending">locked</span>
                 </div>
                 <div class="activity-time">First leg reveals at ${revealTime} · ${placedDate}</div>
@@ -2488,13 +2491,11 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               <div class="activity-text">
                 <strong>${escHtml(isMe ? 'You' : username)}</strong>
                 ${isMe ? 'bet' : ''}
-                <span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin:0 3px;">${legs.length}-LEG PARLAY</span>
+                <span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin:0 3px;">${(legs?.length)||b.pick.match(/\d+/)?.[0]||'?'}-LEG PARLAY</span>
                 <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
                 <span class="activity-badge ${b.status}">${b.status}</span>
               </div>
-              <div style="margin-top:4px;border-left:2px solid var(--gold);padding-left:8px;">
-                ${parlayLegsHtml}
-              </div>
+              ${parlayLegsHtml ? `<div style="margin-top:4px;border-left:2px solid var(--gold);padding-left:8px;">${parlayLegsHtml}</div>` : ''}
               <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
             </div>
           </div>`;
