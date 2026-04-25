@@ -2419,16 +2419,24 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
         ? `-$${parseFloat(b.wager||0).toFixed(2)}`
         : `$${parseFloat(b.wager||0).toFixed(2)} wagered`;
 
-      // Helper: leg status badge (right-aligned)
+      // Helper: leg status badge (shown right after pick name)
       const legStatusBadge = (l) => {
-        if (l.result === 'won')  return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;margin-left:auto;">WON ✓</span>';
-        if (l.result === 'lost') return '<span style="font-size:9px;font-weight:700;color:var(--red);flex-shrink:0;margin-left:auto;">LOST ✗</span>';
-        if (l.result === 'push') return '<span style="font-size:9px;font-weight:700;color:var(--muted);flex-shrink:0;margin-left:auto;">PUSH</span>';
+        if (l.result === 'won')  return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;background:rgba(34,197,94,0.15);padding:1px 5px;border-radius:3px;">WON ✓</span>';
+        if (l.result === 'lost') return '<span style="font-size:9px;font-weight:700;color:var(--red);flex-shrink:0;background:rgba(239,68,68,0.15);padding:1px 5px;border-radius:3px;">LOST ✗</span>';
+        if (l.result === 'push') return '<span style="font-size:9px;font-weight:700;color:var(--muted);flex-shrink:0;">PUSH</span>';
         const started = l.game_time ? new Date(l.game_time) <= now : true;
-        if (started) return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;margin-left:auto;">LIVE</span>';
+        if (started) return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;">LIVE</span>';
         const t = l.game_time ? new Date(l.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
-        return `<span style="font-size:9px;color:var(--muted);flex-shrink:0;margin-left:auto;">${t}</span>`;
+        return `<span style="font-size:9px;color:var(--muted);flex-shrink:0;">${t}</span>`;
       };
+
+      // Helper: leg row HTML
+      const legRow = (l, bg = false) => `
+        <div style="font-size:11px;padding:4px 6px;display:flex;align-items:center;gap:6px;${bg?'background:var(--surface2);border-radius:4px;margin-top:3px;':'border-bottom:1px solid var(--border);'}">
+          <span style="font-weight:500;flex:1;">${escHtml(l.pick)}</span>
+          ${legStatusBadge(l)}
+          <span style="color:var(--gold);flex-shrink:0;min-width:36px;text-align:right;">${l.odds > 0 ? '+' : ''}${l.odds}</span>
+        </div>`;
 
       // ── COMPETITOR PARLAY: progressive leg reveal ──
       if (isParlay && legs && !isMe && !isSettled) {
@@ -2469,12 +2477,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
                 <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
                 <span class="activity-badge ${b.status}">${b.status}</span>
               </div>
-              ${revealedLegs.map(l => `
-                <div style="font-size:11px;margin-top:3px;padding:3px 6px;background:var(--surface2);border-radius:4px;display:flex;align-items:center;gap:6px;">
-                  <span style="font-weight:500;flex:1;">${escHtml(l.pick)}</span>
-                  <span style="color:var(--gold);">${l.odds > 0 ? '+' : ''}${l.odds}</span>
-                  ${legStatusBadge(l)}
-                </div>`).join('')}
+              ${revealedLegs.map(l => legRow(l, true)).join('')}
               ${nextRevealStr}
               <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
             </div>
@@ -2507,19 +2510,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
       // ── OWN BET or revealed: show all details with per-leg status ──
       const ownParlayLegs = isParlay && legs ? `
         <div style="margin-top:5px;border-left:2px solid var(--gold);padding-left:8px;">
-          ${legs.map(l => {
-            const gameTime = l.game_time
-              ? new Date(l.game_time).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' +
-                new Date(l.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
-              : '';
-            return `
-              <div style="font-size:11px;padding:4px 0;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);">
-                <span style="font-weight:500;flex:1;">${escHtml(l.pick)}</span>
-                <span style="color:var(--gold);flex-shrink:0;">${l.odds > 0 ? '+' : ''}${l.odds}</span>
-                ${gameTime && !l.result ? `<span style="color:var(--muted);font-size:10px;flex-shrink:0;">${gameTime}</span>` : ''}
-                ${legStatusBadge(l)}
-              </div>`;
-          }).join('')}
+          ${legs.map(l => legRow(l, false)).join('')}
         </div>` : '';
 
       return `
@@ -2681,11 +2672,35 @@ async function autoGradeBets() {
 
     // ── Fetch all completed scores we need ──
     // Collect all unique sport keys needed
+    // Helper: resolve sport key (handles combined strings like "MLB/NHL/NBA")
+    const getSportKey = (sportStr) => {
+      if (!sportStr) return null;
+      // Try direct match first
+      if (SCORES_SPORT_MAP[sportStr]) return SCORES_SPORT_MAP[sportStr];
+      // Try splitting combined strings like "MLB/NHL/NBA"
+      const parts = sportStr.split(/[/,\s]+/);
+      for (const p of parts) {
+        if (SCORES_SPORT_MAP[p.trim()]) return SCORES_SPORT_MAP[p.trim()];
+      }
+      return null;
+    };
+
     const sportsNeeded = new Set();
-    straightBets.forEach(b => { const k = SCORES_SPORT_MAP[b.sport]; if (k) sportsNeeded.add(k); });
+    straightBets.forEach(b => { const k = getSportKey(b.sport); if (k) sportsNeeded.add(k); });
     parlayBets.forEach(b => {
       const legs = safeParseLegs(b.legs);
-      legs.forEach(l => { const k = SCORES_SPORT_MAP[l.sport]; if (k) sportsNeeded.add(k); });
+      legs.forEach(l => {
+        // Each leg has its own sport — use that, not the combined bet sport
+        const k = getSportKey(l.sport) || getSportKey(b.sport);
+        if (k) sportsNeeded.add(k);
+      });
+      // Also add all sports from the combined sport string
+      if (b.sport) {
+        b.sport.split(/[/,\s]+/).forEach(s => {
+          const k = SCORES_SPORT_MAP[s.trim()];
+          if (k) sportsNeeded.add(k);
+        });
+      }
     });
 
     // Fetch scores per sport key
@@ -2703,15 +2718,30 @@ async function autoGradeBets() {
 
     // Helper: find game in scores — try ID first, then fuzzy team name match
     const findGame = (gameId, sport, pick) => {
-      const key = SCORES_SPORT_MAP[sport];
-      if (!key || !scoresByKey[key]) return null;
+      const key = getSportKey(sport);
+      if (!key || !scoresByKey[key]) {
+        // Try all available score sets if sport lookup failed
+        for (const scores of Object.values(scoresByKey)) {
+          const byId = scores.find(g => g.id === gameId);
+          if (byId) return byId;
+          if (pick) {
+            const pickLower = pick.toLowerCase().replace(/ ml$| [+-]\d.*$/, '').trim();
+            const fuzzy = scores.find(g =>
+              g.home_team.toLowerCase().includes(pickLower) ||
+              g.away_team.toLowerCase().includes(pickLower) ||
+              pickLower.includes(g.home_team.toLowerCase().split(' ').pop()) ||
+              pickLower.includes(g.away_team.toLowerCase().split(' ').pop())
+            );
+            if (fuzzy) return fuzzy;
+          }
+        }
+        return null;
+      }
       const games = scoresByKey[key];
-
       // 1. Exact ID match
       const exact = games.find(g => g.id === gameId);
       if (exact) return exact;
-
-      // 2. Fuzzy: extract team name from pick and match against scores
+      // 2. Fuzzy team name match
       if (!pick) return null;
       const pickLower = pick.toLowerCase().replace(/ ml$| [+-]\d.*$/, '').trim();
       return games.find(g =>
