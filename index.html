@@ -794,29 +794,63 @@ async function signOut() {
 
 db.auth.onAuthStateChange(async (event, session) => {
   console.log('Auth state change:', event, session?.user?.email);
-  if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session?.user)) {
+  if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session?.user) || event === 'TOKEN_REFRESHED') {
     currentUser = session.user;
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-screen').classList.add('visible');
     const cached = localStorage.getItem('bl_user');
     if (cached) document.getElementById('header-user').textContent = 'Hey, ' + cached;
-    await loadProfile();
-    await loadDashboard();
-    initSportPills();
-    autoGradeBets(); // grade any pending bets silently
-    // Handle invite deep-link: ?join=LeagueName&pw=password
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('join') && urlParams.get('pw')) {
-      document.getElementById('join-name').value = urlParams.get('join');
-      document.getElementById('join-pw').value   = urlParams.get('pw');
-      openModal('join-modal');
-      // Clean URL
-      window.history.replaceState({}, '', window.location.pathname);
+    if (event !== 'TOKEN_REFRESHED') {
+      await loadProfile();
+      await loadDashboard();
+      initSportPills();
+      autoGradeBets();
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('join') && urlParams.get('pw')) {
+        document.getElementById('join-name').value = urlParams.get('join');
+        document.getElementById('join-pw').value   = urlParams.get('pw');
+        openModal('join-modal');
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    } else {
+      // Token refreshed (returning from background) — just reload data quietly
+      await loadDashboard();
     }
   } else if (event === 'SIGNED_OUT') {
     currentUser = null;
     document.getElementById('auth-screen').style.display = 'flex';
     document.getElementById('app-screen').classList.remove('visible');
+  }
+});
+
+// ── PWA: Revive app when phone wakes / user returns from background ──
+let _lastVisibleAt = Date.now();
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible') {
+    const awayMs = Date.now() - _lastVisibleAt;
+    if (awayMs > 30000 && currentUser) {
+      // Away for >30s — refresh session and reload data
+      try {
+        const { data: { session } } = await db.auth.getSession();
+        if (session) {
+          currentUser = session.user;
+          await loadDashboard();
+          // If on a league activity tab, refresh it
+          if (currentLeague) {
+            const activeTab = document.querySelector('#panel-league-detail .league-tab.active');
+            if (activeTab?.id === 'league-tab-activity') loadActivity(currentLeague.league_id);
+            else if (activeTab?.id === 'league-tab-leaderboard') loadLeaderboard(currentLeague.league_id);
+          }
+        } else {
+          // Session truly expired — go to login
+          currentUser = null;
+          document.getElementById('auth-screen').style.display = 'flex';
+          document.getElementById('app-screen').classList.remove('visible');
+        }
+      } catch(e) { console.warn('Visibility refresh error:', e); }
+    }
+  } else {
+    _lastVisibleAt = Date.now();
   }
 });
 
@@ -2671,24 +2705,35 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
     el.innerHTML = `<div class="empty" style="cursor:pointer" onclick="loadActivity('${leagueId}')">⟳ Tap to retry</div>`;
   }
 
-  // Batch load reactions + comments for ALL bets automatically (no toggle needed)
-  try {
-    const betIds = (displayBets||[]).map(b => b.id);
-    if (!betIds.length) return;
-    setTimeout(() => loadReactionsForBets(betIds), 80);
-    setTimeout(async () => {
-      try {
-        const { data: allComments } = await db.from('bet_comments')
-          .select('id, bet_id, user_id, content, created_at')
-          .in('bet_id', betIds).order('created_at', { ascending: true });
-        const commenterIds = [...new Set((allComments||[]).map(c => c.user_id))];
-        const commenterMap = commenterIds.length ? await getProfiles(commenterIds) : {};
-        const byBet = {};
-        (allComments||[]).forEach(c => { if(!byBet[c.bet_id]) byBet[c.bet_id]=[]; byBet[c.bet_id].push({...c, prof: commenterMap[c.user_id]||{}}); });
-        betIds.forEach(bid => renderInlineCommentBox(bid, byBet[bid]||[], leagueId));
-      } catch(e) { betIds.forEach(bid => renderInlineCommentBox(bid, [], leagueId)); }
-    }, 150);
-  } catch(e) {}
+  // Load reactions + comments immediately after render (no race-condition timeouts)
+  const betIds = (displayBets||[]).map(b => b.id);
+  if (!betIds.length) return;
+
+  // Load reactions first (fast)
+  loadReactionsForBets(betIds).catch(() => {});
+
+  // Load all comments in one batch query
+  (async () => {
+    try {
+      const { data: allComments, error } = await db.from('bet_comments')
+        .select('id, bet_id, user_id, content, created_at')
+        .in('bet_id', betIds)
+        .order('created_at', { ascending: true });
+
+      if (error) { console.warn('Comments load error:', error.message); return; }
+      if (!allComments?.length) return; // no comments yet — input boxes already rendered
+
+      const commenterIds = [...new Set(allComments.map(c => c.user_id))];
+      const commenterMap = commenterIds.length ? await getProfiles(commenterIds) : {};
+      const byBet = {};
+      allComments.forEach(c => {
+        if (!byBet[c.bet_id]) byBet[c.bet_id] = [];
+        byBet[c.bet_id].push({ ...c, prof: commenterMap[c.user_id] || {} });
+      });
+      // Only update bets that actually have comments
+      Object.keys(byBet).forEach(bid => renderInlineCommentBox(bid, byBet[bid], leagueId));
+    } catch(e) { console.warn('Batch comments error:', e); }
+  })();
 }
 
 // ── INVITE ──
