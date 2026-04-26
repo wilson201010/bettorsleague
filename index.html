@@ -2536,7 +2536,17 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
                   <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
                   <button type="button" onclick="toggleReactPicker('${b.id}',this)" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
                 </div>
-                <div id="comments-${b.id}" style="margin-top:6px;"></div>
+                <div id="comments-${b.id}" style="margin-top:6px;">
+                  <div id="comment-list-${b.id}"></div>
+                  <div style="display:flex;gap:6px;margin-top:4px;">
+                    <div id="comment-input-${b.id}" contenteditable="true"
+                      data-placeholder="Add a comment…"
+                      style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:5px 9px;min-height:28px;line-height:1.5;word-break:break-word;"
+                      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();postComment('${b.id}','${leagueId}')}"></div>
+                    <button type="button" onclick="postComment('${b.id}','${leagueId}')"
+                      style="background:var(--gold);border:none;border-radius:6px;color:#0a0d13;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1px;padding:5px 10px;cursor:pointer;align-self:flex-end;">Send</button>
+                  </div>
+                </div>
               </div>
             </div>`;
         }
@@ -2558,7 +2568,17 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
                 <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
                 <button type="button" onclick="toggleReactPicker('${b.id}',this)" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
               </div>
-              <div id="comments-${b.id}" style="margin-top:6px;"></div>
+              <div id="comments-${b.id}" style="margin-top:6px;">
+                  <div id="comment-list-${b.id}"></div>
+                  <div style="display:flex;gap:6px;margin-top:4px;">
+                    <div id="comment-input-${b.id}" contenteditable="true"
+                      data-placeholder="Add a comment…"
+                      style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:5px 9px;min-height:28px;line-height:1.5;word-break:break-word;"
+                      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();postComment('${b.id}','${leagueId}')}"></div>
+                    <button type="button" onclick="postComment('${b.id}','${leagueId}')"
+                      style="background:var(--gold);border:none;border-radius:6px;color:#0a0d13;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1px;padding:5px 10px;cursor:pointer;align-self:flex-end;">Send</button>
+                  </div>
+                </div>
             </div>
           </div>`;
       }
@@ -2585,7 +2605,17 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
                   <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
                   <button type="button" onclick="toggleReactPicker('${b.id}',this)" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
                 </div>
-                <div id="comments-${b.id}" style="margin-top:6px;"></div>
+                <div id="comments-${b.id}" style="margin-top:6px;">
+                  <div id="comment-list-${b.id}"></div>
+                  <div style="display:flex;gap:6px;margin-top:4px;">
+                    <div id="comment-input-${b.id}" contenteditable="true"
+                      data-placeholder="Add a comment…"
+                      style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:5px 9px;min-height:28px;line-height:1.5;word-break:break-word;"
+                      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();postComment('${b.id}','${leagueId}')}"></div>
+                    <button type="button" onclick="postComment('${b.id}','${leagueId}')"
+                      style="background:var(--gold);border:none;border-radius:6px;color:#0a0d13;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1px;padding:5px 10px;cursor:pointer;align-self:flex-end;">Send</button>
+                  </div>
+                </div>
               </div>
             </div>`;
         }
@@ -2615,7 +2645,17 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
               <button type="button" onclick="toggleReactPicker('${b.id}',this)" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
             </div>
-            <div id="comments-${b.id}" style="margin-top:6px;"></div>
+            <div id="comments-${b.id}" style="margin-top:6px;">
+                  <div id="comment-list-${b.id}"></div>
+                  <div style="display:flex;gap:6px;margin-top:4px;">
+                    <div id="comment-input-${b.id}" contenteditable="true"
+                      data-placeholder="Add a comment…"
+                      style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:5px 9px;min-height:28px;line-height:1.5;word-break:break-word;"
+                      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();postComment('${b.id}','${leagueId}')}"></div>
+                    <button type="button" onclick="postComment('${b.id}','${leagueId}')"
+                      style="background:var(--gold);border:none;border-radius:6px;color:#0a0d13;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1px;padding:5px 10px;cursor:pointer;align-self:flex-end;">Send</button>
+                  </div>
+                </div>
           </div>
         </div>`;
     }).join('');
@@ -3523,12 +3563,12 @@ async function renderComments(betId) {
   }
 }
 
-// Renders comment box inline for a bet (called after batch load, and after posting)
+// Renders comment list for a bet (comment input is pre-rendered in HTML template)
 function renderInlineCommentBox(betId, comments, leagueId) {
-  const el = document.getElementById(`comments-${betId}`);
-  if (!el) return;
+  const listEl = document.getElementById(`comment-list-${betId}`);
+  if (!listEl) return;
 
-  const commentsHtml = comments.map(c => {
+  listEl.innerHTML = comments.map(c => {
     const prof = c.prof || {};
     const name = prof.username || 'Player';
     const avatarC = prof.avatar || name[0].toUpperCase();
@@ -3538,39 +3578,23 @@ function renderInlineCommentBox(betId, comments, leagueId) {
       <div style="display:flex;gap:7px;margin-bottom:7px;align-items:flex-start;">
         <div style="width:22px;height:22px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:${avatarIsEmoji?'13px':'10px'};font-weight:700;color:var(--gold);flex-shrink:0;">${escHtml(avatarC)}</div>
         <div style="flex:1;min-width:0;">
-          <span style="font-size:11px;font-weight:600;color:var(--gold);">${escHtml(isMe?'You':name)}</span>
+          <span style="font-size:11px;font-weight:600;color:${isMe?'var(--gold)':'var(--text)'};">${escHtml(isMe?'You':name)}</span>
           <span style="font-size:10px;color:var(--muted);margin-left:5px;">${formatTimeAgo(c.created_at)}</span>
           <div style="font-size:12px;color:var(--text);margin-top:1px;line-height:1.4;word-break:break-word;">${escHtml(c.content)}</div>
         </div>
         ${isMe ? `<button type="button" onclick="deleteComment('${c.id}','${betId}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;line-height:1;flex-shrink:0;padding:0;">×</button>` : ''}
       </div>`;
   }).join('');
-
-  el.innerHTML = `
-    <div style="border-left:2px solid var(--border2);padding-left:8px;">
-      <div id="comment-list-${betId}">${commentsHtml}</div>
-      <div style="display:flex;gap:6px;margin-top:${comments.length?'8':'0'}px;">
-        <div id="comment-input-${betId}" contenteditable="true"
-          data-placeholder="Add a comment…"
-          style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:5px 9px;min-height:28px;line-height:1.5;word-break:break-word;"
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();postComment('${betId}','${leagueId}')}"></div>
-        <button type="button" onclick="postComment('${betId}','${leagueId}')"
-          style="background:var(--gold);border:none;border-radius:6px;color:#0a0d13;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1px;padding:5px 10px;cursor:pointer;align-self:flex-end;">Send</button>
-      </div>
-    </div>`;
 }
 
 async function postComment(betId, leagueId) {
   const input = document.getElementById(`comment-input-${betId}`);
   const content = (input?.textContent || input?.innerText || '').trim();
   if (!content) return;
-  input.textContent = ''; // clear contenteditable
+  input.textContent = '';
   try {
-    const { data: newComment, error } = await db.from('bet_comments')
-      .insert({ bet_id: betId, user_id: currentUser.id, content })
-      .select('id, bet_id, user_id, content, created_at').single();
-    if (error) throw error;
-    // Refresh this bet's comment box
+    await db.from('bet_comments').insert({ bet_id: betId, user_id: currentUser.id, content });
+    // Refresh just the comment list
     const { data: allComments } = await db.from('bet_comments')
       .select('id, bet_id, user_id, content, created_at').eq('bet_id', betId).order('created_at', { ascending: true });
     const commenterIds = [...new Set((allComments||[]).map(c => c.user_id))];
