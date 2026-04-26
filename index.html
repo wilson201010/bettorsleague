@@ -339,6 +339,9 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
 }
 .positive { color: var(--green); }
 .negative { color: var(--red); }
+/* Contenteditable placeholder */
+[contenteditable]:empty:before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; display: block; }
+[contenteditable]:focus { outline: none; }
 </style>
 </head>
 <body>
@@ -2345,20 +2348,28 @@ async function loadLeaderboard(leagueId) {
       const prof = userMap[m.user_id] || {};
       const username = prof.username || 'Player';
       const avatar = prof.avatar || username[0]?.toUpperCase() || '?';
+      // Always show First Name L. format as the primary display name
       const realName = prof.first_name
         ? `${prof.first_name}${prof.last_initial ? ' ' + prof.last_initial + '.' : ''}`
         : '';
+      // Primary name line: "First L." if available, else username. Gold + "(you)" if current user
+      const primaryName = realName || username;
+      const nameHtml = isMe
+        ? `<span style="color:var(--gold);font-weight:700;">${escHtml(primaryName)}</span> <span style="font-size:10px;color:var(--gold);opacity:0.7;">(you)</span>`
+        : `<span>${escHtml(primaryName)}</span>`;
+      // Subtitle: show username if we're displaying realName
+      const subName = realName ? `<span style="font-size:10px;color:var(--muted);">@${escHtml(username)}</span>` : '';
 
       const settledNet = getSettledNet(m.user_id);
       const netColor = settledNet > 0 ? 'positive' : settledNet < 0 ? 'negative' : '';
       const netStr = settledNet === 0 ? '$0' : `${settledNet > 0 ? '+' : '-'}$${Math.abs(settledNet).toFixed(0)}`;
 
       return `
-        <div class="leaderboard-row${isMe ? ' lb-me' : ''}" style="cursor:pointer;" onclick="viewPlayerActivity('${m.user_id}','${escAttr(username)}')">
+        <div class="leaderboard-row${isMe ? ' lb-me' : ''}" style="cursor:pointer;${isMe?'border-left:3px solid var(--gold);':''}" onclick="viewPlayerActivity('${m.user_id}','${escAttr(username)}')">
           <div class="lb-rank ${rankColors[i] || 'other'}">${i+1}</div>
           <div class="lb-avatar" onclick="event.stopPropagation();openProfile('${m.user_id}',${isMe})" style="cursor:pointer;font-size:${avatar.length>1?'18px':'14px'};">${escHtml(avatar)}</div>
           <div class="lb-info">
-            <div class="lb-name">${escHtml(username)}${realName ? ` <span style="font-size:10px;color:var(--muted);">(${escHtml(realName)})</span>` : ''}${isMe ? ' <span style="font-size:10px;color:var(--muted)">(you)</span>' : ''}</div>
+            <div class="lb-name">${nameHtml} ${subName}</div>
             <div class="lb-record">${stats.won}W–${stats.lost}L · ${stats.pending} pending · <span style="color:var(--gold);font-size:10px;">view bets ›</span></div>
           </div>
           <div class="lb-bal">
@@ -2428,8 +2439,16 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
       const avatar   = prof.avatar || username[0].toUpperCase();
       const avatarIsEmoji = avatar.length > 1 || avatar.codePointAt(0) > 127;
       const avatarHtml = `<div class="activity-avatar" style="font-size:${avatarIsEmoji?'20px':'13px'};cursor:pointer;" onclick="openProfile('${b.user_id}',${b.user_id === currentUser.id})">${escHtml(avatar)}</div>`;
-      const timeAgo = formatTimeAgo(b.placed_at);
+      // Display name: First Name L. format
+      const displayName = prof.first_name
+        ? `${prof.first_name}${prof.last_initial ? ' ' + prof.last_initial + '.' : ''}`
+        : username;
       const isMe = b.user_id === currentUser.id;
+      // Name shown in activity text - always use displayName, bold gold if it's you
+      const nameTag = isMe
+        ? `<strong style="color:var(--gold);">${escHtml(displayName)}</strong>`
+        : `<strong>${escHtml(displayName)}</strong>`;
+      const timeAgo = formatTimeAgo(b.placed_at);
       const isSettled = b.status !== 'pending';
       const isParlay = b.type === 'parlay';
       const legs = isParlay && b.legs ? (() => { try { return JSON.parse(b.legs); } catch(e) { return null; } })() : null;
@@ -2510,7 +2529,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               ${avatarHtml}
               <div class="activity-content">
                 <div class="activity-text">
-                  <strong>${escHtml(username)}</strong> placed a
+                  ${nameTag} placed a
                   <span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;">${(legs?.length)||'?'}-LEG PARLAY</span>
                   <span class="activity-badge pending">locked</span>
                 </div>
@@ -2529,20 +2548,19 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
             ${avatarHtml}
             <div class="activity-content">
               <div class="activity-text">
-                <strong>${escHtml(isMe ? 'You' : username)}</strong>
-                ${isMe ? 'bet' : ''}
+                ${nameTag}
+                bet
                 <span style="background:var(--gold);color:#0a0d13;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin:0 3px;">${(legs?.length)||b.pick.match(/\d+/)?.[0]||'?'}-LEG PARLAY</span>
                 <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
                 <span class="activity-badge ${b.status}">${b.status}</span>
               </div>
               ${parlayLegsHtml ? `<div style="margin-top:4px;border-left:2px solid var(--gold);padding-left:8px;">${parlayLegsHtml}</div>` : ''}
               <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
-              <div class="social-bar" id="social-${b.id}" style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+              <div class="social-bar" style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
                 <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
                 <button type="button" onclick="toggleReactPicker('${b.id}',this)" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
-                <button type="button" onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 4px;">💬</button>
               </div>
-              <div id="comments-${b.id}" style="display:none;margin-top:8px;"></div>
+              <div id="comments-${b.id}" style="margin-top:6px;"></div>
             </div>
           </div>`;
       }
@@ -2560,7 +2578,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               ${avatarHtml}
               <div class="activity-content">
                 <div class="activity-text">
-                  <strong>${escHtml(username)}</strong> placed a bet on
+                  ${nameTag} placed a bet on
                   <strong>${escHtml(b.sport||'a game')}</strong>
                   <span class="activity-badge pending">locked</span>
                 </div>
@@ -2589,7 +2607,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
           ${avatarHtml}
           <div class="activity-content">
             <div class="activity-text">
-              <strong>${escHtml(isMe ? 'You' : username)}</strong> bet
+              ${nameTag} bet
               <strong>${escHtml(b.pick)}</strong>
               <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
               <span class="activity-badge ${b.status}">${b.status}</span>
@@ -3534,21 +3552,21 @@ function renderInlineCommentBox(betId, comments, leagueId) {
     <div style="border-left:2px solid var(--border2);padding-left:8px;">
       <div id="comment-list-${betId}">${commentsHtml}</div>
       <div style="display:flex;gap:6px;margin-top:${comments.length?'8':'0'}px;">
-        <input id="comment-input-${betId}" type="text" placeholder="Add a comment…" maxlength="200"
-          autocomplete="new-password" data-form-type="other" data-lpignore="true"
-          style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:5px 9px;font-family:'DM Sans',sans-serif;"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();postComment('${betId}','${leagueId}')}" />
+        <div id="comment-input-${betId}" contenteditable="true"
+          data-placeholder="Add a comment…"
+          style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:5px 9px;min-height:28px;line-height:1.5;word-break:break-word;"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();postComment('${betId}','${leagueId}')}"></div>
         <button type="button" onclick="postComment('${betId}','${leagueId}')"
-          style="background:var(--gold);border:none;border-radius:6px;color:#0a0d13;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1px;padding:5px 10px;cursor:pointer;">Send</button>
+          style="background:var(--gold);border:none;border-radius:6px;color:#0a0d13;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1px;padding:5px 10px;cursor:pointer;align-self:flex-end;">Send</button>
       </div>
     </div>`;
 }
 
 async function postComment(betId, leagueId) {
   const input = document.getElementById(`comment-input-${betId}`);
-  const content = input?.value?.trim();
+  const content = (input?.textContent || input?.innerText || '').trim();
   if (!content) return;
-  input.value = '';
+  input.textContent = ''; // clear contenteditable
   try {
     const { data: newComment, error } = await db.from('bet_comments')
       .insert({ bet_id: betId, user_id: currentUser.id, content })
