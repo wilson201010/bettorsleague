@@ -592,6 +592,11 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
 
 <div class="toast" id="toast"></div>
 
+<!-- GLOBAL EMOJI REACTION PICKER -->
+<div id="global-react-picker" style="display:none;position:fixed;z-index:600;background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:10px;box-shadow:0 8px 32px rgba(0,0,0,0.6);width:210px;" onclick="event.stopPropagation()">
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;" id="global-react-grid"></div>
+</div>
+
 <script>
 const SUPABASE_URL = 'https://fexbrsplfongvardrarb.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZleGJyc3BsZm9uZ3ZhcmRyYXJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxODUzNzgsImV4cCI6MjA5MTc2MTM3OH0.K9umByuKZn4BxgKSyfoZI_Q2CeS2I1b3WmdNuQco9QA';
@@ -2524,11 +2529,8 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
               <div class="social-bar" id="social-${b.id}" style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
                 <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
-                <button onclick="toggleReactPicker('${b.id}')" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
-                <div id="react-picker-${b.id}" style="display:none;position:absolute;z-index:10;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:8px 10px;box-shadow:0 4px 16px rgba(0,0,0,0.4);margin-top:2px;flex-wrap:wrap;gap:4px;max-width:220px;">
-                  ${['🔥','🤑','💎','🎯','🍀','😂','😭','🤦','🚀','👑'].map(e=>`<button onclick="toggleReaction('${b.id}','${e}','${leagueId}')" style="background:none;border:1px solid transparent;border-radius:8px;font-size:20px;padding:4px;cursor:pointer;line-height:1;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">${e}</button>`).join('')}
-                </div>
-                <button onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 4px;">💬</button>
+                <button type="button" onclick="toggleReactPicker('${b.id}',this)" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
+                <button type="button" onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 4px;">💬</button>
               </div>
               <div id="comments-${b.id}" style="display:none;margin-top:8px;"></div>
             </div>
@@ -2580,11 +2582,8 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
             <div class="activity-time">${escHtml(b.sport||'')} · ${resultText}${gameStartStr ? ' · 🕐 ' + gameStartStr : ''} · ${placedDate}</div>
             <div class="social-bar" id="social-${b.id}" style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
               <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
-              <button onclick="toggleReactPicker('${b.id}')" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
-              <div id="react-picker-${b.id}" style="display:none;position:absolute;z-index:10;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:8px 10px;box-shadow:0 4px 16px rgba(0,0,0,0.4);margin-top:2px;display:none;flex-wrap:wrap;gap:4px;max-width:220px;">
-                ${['🔥','🤑','💎','🎯','🍀','😂','😭','🤦','🚀','👑'].map(e=>`<button onclick="toggleReaction('${b.id}','${e}','${leagueId}')" style="background:none;border:1px solid transparent;border-radius:8px;font-size:20px;padding:4px;cursor:pointer;line-height:1;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">${e}</button>`).join('')}
-              </div>
-              <button onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 4px;">💬</button>
+              <button type="button" onclick="toggleReactPicker('${b.id}',this)" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
+              <button type="button" onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 4px;">💬</button>
             </div>
             <div id="comments-${b.id}" style="display:none;margin-top:8px;"></div>
           </div>
@@ -2960,6 +2959,8 @@ async function autoGradeBets() {
 
     await loadLeagues();
     await loadMyBets();
+    // Also attempt ESPN prop grading
+    gradePropsWithESPN();
   } catch(e) { console.warn('autoGradeBets error:', e); }
 }
 
@@ -3309,21 +3310,64 @@ async function saveProfile() {
 //   create policy "read all" on bet_comments for select using (true);
 //   create policy "insert own" on bet_comments for insert with check (auth.uid() = user_id);
 
-const REACTION_EMOJIS = ['🔥','🤑','💎','🎯','🍀','😂','😭','🤦','🚀','👑'];
+const REACTION_EMOJIS = [
+  '👍','👎','🥂','💀','🧠',
+  '🫡','💪','🏆','💰','😍',
+  '🎉','🤢','😡','🤯','🥶',
+  '🥱','😴','😈','🖕','🔥',
+  '😂','😭','🤑','💎','🎯'
+];
 
-// Close react pickers when clicking outside
+// Populate global picker grid on first call
+(function initGlobalPicker() {
+  const grid = document.getElementById('global-react-grid');
+  if (!grid) return;
+  grid.innerHTML = REACTION_EMOJIS.map(e =>
+    `<button type="button" onclick="pickReaction('${e}')"
+      style="background:none;border:1px solid transparent;border-radius:8px;font-size:22px;
+             padding:5px 2px;cursor:pointer;text-align:center;line-height:1;width:100%;"
+      onmouseover="this.style.background='var(--surface2)';this.style.borderColor='var(--border2)'"
+      onmouseout="this.style.background='none';this.style.borderColor='transparent'">${e}</button>`
+  ).join('');
+})();
+
+let _activeBetIdForPicker = null;
+
+// Close picker when clicking outside
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('[id^="react-picker-"]') && !e.target.closest('[id^="react-add-"]')) {
-    document.querySelectorAll('[id^="react-picker-"]').forEach(el => el.style.display = 'none');
+  if (!e.target.closest('#global-react-picker') && !e.target.closest('[id^="react-add-"]')) {
+    document.getElementById('global-react-picker').style.display = 'none';
+    _activeBetIdForPicker = null;
   }
 });
 
-function toggleReactPicker(betId) {
-  const picker = document.getElementById(`react-picker-${betId}`);
-  if (!picker) return;
-  const isOpen = picker.style.display === 'flex';
-  document.querySelectorAll('[id^="react-picker-"]').forEach(el => el.style.display = 'none');
-  if (!isOpen) picker.style.display = 'flex';
+function toggleReactPicker(betId, btn) {
+  const picker = document.getElementById('global-react-picker');
+  if (_activeBetIdForPicker === betId && picker.style.display !== 'none') {
+    picker.style.display = 'none';
+    _activeBetIdForPicker = null;
+    return;
+  }
+  _activeBetIdForPicker = betId;
+  picker.style.display = 'block';
+
+  // Position: above button if near bottom, else below
+  const rect = btn.getBoundingClientRect();
+  const pickerH = 160;
+  const spaceBelow = window.innerHeight - rect.bottom - 80; // 80 = bet slip bar
+  if (spaceBelow < pickerH) {
+    picker.style.top  = (rect.top - pickerH - 6 + window.scrollY) + 'px';
+  } else {
+    picker.style.top  = (rect.bottom + 6 + window.scrollY) + 'px';
+  }
+  picker.style.left = Math.min(rect.left, window.innerWidth - 218) + 'px';
+}
+
+function pickReaction(emoji) {
+  const betId = _activeBetIdForPicker;
+  document.getElementById('global-react-picker').style.display = 'none';
+  _activeBetIdForPicker = null;
+  if (betId) toggleReaction(betId, emoji, null);
 }
 
 async function loadReactionsForBets(betIds) {
@@ -3364,8 +3408,6 @@ async function loadReactionsForBets(betIds) {
 
 async function toggleReaction(betId, reaction, leagueId) {
   if (!currentUser) return;
-  // Close picker
-  document.querySelectorAll('[id^="react-picker-"]').forEach(el => el.style.display = 'none');
   try {
     const { data: existing } = await db.from('bet_reactions')
       .select('id').eq('bet_id', betId).eq('user_id', currentUser.id).eq('reaction', reaction).maybeSingle();
@@ -3424,9 +3466,10 @@ async function renderComments(betId) {
         ${commentsHtml || '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">No comments yet. Be first!</div>'}
         <div style="display:flex;gap:6px;margin-top:4px;">
           <input id="comment-input-${betId}" type="text" placeholder="Add a comment…" maxlength="200"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
             style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:6px 10px;font-family:'DM Sans',sans-serif;"
             onkeydown="if(event.key==='Enter')postComment('${betId}')" />
-          <button onclick="postComment('${betId}')"
+          <button type="button" onclick="postComment('${betId}')"
             style="background:var(--gold);border:none;border-radius:6px;color:#0a0d13;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;padding:6px 12px;cursor:pointer;">Send</button>
         </div>
       </div>`;
@@ -3452,6 +3495,187 @@ async function deleteComment(commentId, betId) {
     await db.from('bet_comments').delete().eq('id', commentId).eq('user_id', currentUser.id);
     await renderComments(betId);
   } catch(e) { showToast('Could not delete comment.', true); }
+}
+
+// ── PROP BET GRADING VIA ESPN PUBLIC API ──
+const ESPN_SPORT_PATH = {
+  'NBA':'basketball/nba','MLB':'baseball/mlb',
+  'NHL':'hockey/nhl','NFL':'football/nfl'
+};
+
+// Map pick market text → ESPN stat label(s) and whether to sum them
+const PROP_STAT_MAP = {
+  // NBA
+  'Player Points':                  { labels:['PTS'], sum:false },
+  'Player Rebounds':                { labels:['REB'], sum:false },
+  'Player Assists':                 { labels:['AST'], sum:false },
+  'Player Threes':                  { labels:['3PT','3PM','FG3M'], sum:false },
+  'Player Steals':                  { labels:['STL'], sum:false },
+  'Player Blocks':                  { labels:['BLK'], sum:false },
+  'Player Turnovers':               { labels:['TO'], sum:false },
+  'Player Points Rebounds Assists': { labels:['PTS','REB','AST'], sum:true },
+  // MLB batters
+  'Batter Home Runs':               { labels:['HR'], sum:false },
+  'Batter Hits':                    { labels:['H'], sum:false },
+  'Batter Total Bases':             { labels:['TB'], sum:false },
+  'Batter Rbis':                    { labels:['RBI'], sum:false },
+  'Batter Stolen Bases':            { labels:['SB'], sum:false },
+  // MLB pitchers
+  'Pitcher Strikeouts':             { labels:['K','SO'], sum:false },
+  'Pitcher Walks':                  { labels:['BB'], sum:false },
+  'Pitcher Hits Allowed':           { labels:['H'], sum:false },
+  // NHL
+  'Player Goals':                   { labels:['G'], sum:false },
+  'Player Shots On Goal':           { labels:['SOG','S'], sum:false },
+};
+
+function parsePropPick(pick) {
+  // Format: "Player Name O1.5 Market Name" or "Player Name U0.5 Market Name"
+  const m = (pick||'').match(/^(.+?)\s+([OU])(\d+\.?\d*)\s+(.+)$/i);
+  if (!m) return null;
+  return { playerName: m[1].trim(), direction: m[2].toUpperCase(), line: parseFloat(m[3]), market: m[4].trim() };
+}
+
+function findPlayerStatInESPN(summary, playerName, market) {
+  const statInfo = PROP_STAT_MAP[market];
+  if (!statInfo) return null;
+  const nameLower = playerName.toLowerCase().trim();
+  const lastName  = nameLower.split(' ').pop();
+
+  for (const teamData of summary.boxscore?.players || []) {
+    for (const grp of teamData.statistics || []) {
+      const labels = grp.labels || grp.keys || [];
+      // For summed stats (PRA), collect all matching label indices
+      const idxMap = {};
+      for (const lbl of statInfo.labels) {
+        const idx = labels.findIndex(l => l.toLowerCase() === lbl.toLowerCase());
+        if (idx !== -1) idxMap[lbl] = idx;
+      }
+      if (!Object.keys(idxMap).length) continue;
+
+      for (const ath of grp.athletes || []) {
+        const athName = (ath.athlete?.displayName || '').toLowerCase();
+        const athLast = athName.split(' ').pop();
+        if (!athName.includes(nameLower) && !athName.includes(lastName) && lastName !== athLast) continue;
+        if (statInfo.sum) {
+          let total = 0;
+          for (const [, idx] of Object.entries(idxMap)) total += parseFloat(ath.stats?.[idx] || 0);
+          return total;
+        } else {
+          const idx = Object.values(idxMap)[0];
+          const val = parseFloat(ath.stats?.[idx]);
+          if (!isNaN(val)) return val;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+async function gradePropsWithESPN() {
+  if (!currentUser || !userLeagues.length) return;
+  try {
+    const leagueIds = userLeagues.map(l => l.league_id);
+    const { data: pending } = await dbQuery(() =>
+      db.from('bets').select('*').in('league_id', leagueIds).eq('status','pending')
+    );
+    if (!pending?.length) return;
+
+    const now = new Date();
+
+    // Collect gradable prop straight bets (game must have started)
+    const propBets = pending.filter(b =>
+      b.type !== 'parlay' && isPropBet(b) &&
+      b.game_time && new Date(b.game_time) <= now
+    );
+    // Collect parlays with prop legs
+    const propParlays = pending.filter(b => b.type === 'parlay' && (() => {
+      const legs = safeParseLegs(b.legs);
+      return legs.some(l => parsePropPick(l.pick));
+    })());
+
+    if (!propBets.length && !propParlays.length) return;
+
+    // Group by sport+date to minimize API calls
+    const espnCache = {}; // key: "sport|YYYYMMDD" → array of {event, summary}
+
+    const getESPNGames = async (sport, gameTime) => {
+      const path = ESPN_SPORT_PATH[sport];
+      if (!path || !gameTime) return [];
+      const dt = new Date(gameTime);
+      const dateStr = dt.toISOString().slice(0,10).replace(/-/g,'');
+      const cacheKey = `${path}|${dateStr}`;
+      if (espnCache[cacheKey]) return espnCache[cacheKey];
+
+      espnCache[cacheKey] = [];
+      try {
+        const sb = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${dateStr}&limit=50`);
+        if (!sb.ok) return [];
+        const sbData = await sb.json();
+        const completedEvents = (sbData.events||[]).filter(e => e.status?.type?.completed);
+
+        for (const ev of completedEvents) {
+          try {
+            const sum = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/summary?event=${ev.id}`);
+            if (!sum.ok) continue;
+            const sumData = await sum.json();
+            espnCache[cacheKey].push({ event: ev, summary: sumData });
+            await new Promise(r => setTimeout(r, 120)); // be polite to ESPN
+          } catch(e) {}
+        }
+      } catch(e) { console.warn('ESPN scoreboard error', sport, e); }
+      return espnCache[cacheKey];
+    };
+
+    // Grade a prop pick against ESPN data
+    const gradeOneProp = async (pick, sport, gameTime) => {
+      const parsed = parsePropPick(pick);
+      if (!parsed) return null;
+      const games = await getESPNGames(sport, gameTime);
+      for (const { summary } of games) {
+        const val = findPlayerStatInESPN(summary, parsed.playerName, parsed.market);
+        if (val === null) continue;
+        if (val === parsed.line) return 'push';
+        if (parsed.direction === 'O') return val > parsed.line ? 'won' : 'lost';
+        return val < parsed.line ? 'won' : 'lost';
+      }
+      return null; // player not found in any completed game yet
+    };
+
+    // Grade straight prop bets
+    for (const bet of propBets) {
+      const sport = (bet.sport||'').split(/[/,\s]+/)[0];
+      const result = await gradeOneProp(bet.pick, sport, bet.game_time);
+      if (result) await settleBet(bet, result);
+    }
+
+    // Grade parlay prop legs
+    for (const bet of propParlays) {
+      const legs = safeParseLegs(bet.legs);
+      let parlayLost = false, allSettled = true;
+      const updatedLegs = [];
+      for (const leg of legs) {
+        if (leg.result) { updatedLegs.push(leg); continue; }
+        if (leg.game_time && new Date(leg.game_time) > now) { allSettled = false; updatedLegs.push(leg); continue; }
+        if (!parsePropPick(leg.pick)) { allSettled = false; updatedLegs.push(leg); continue; }
+        const sport = (leg.sport || bet.sport||'').split(/[/,\s]+/)[0];
+        const result = await gradeOneProp(leg.pick, sport, leg.game_time || bet.game_time);
+        if (!result) { allSettled = false; updatedLegs.push(leg); continue; }
+        if (result === 'lost') parlayLost = true;
+        updatedLegs.push({ ...leg, result });
+      }
+      if (parlayLost) { await settleBet(bet, 'lost', JSON.stringify(updatedLegs)); continue; }
+      if (!allSettled) { await db.from('bets').update({ legs: JSON.stringify(updatedLegs) }).eq('id', bet.id); continue; }
+      const winLegs = updatedLegs.filter(l => l.result !== 'push');
+      if (!winLegs.length) {
+        await settleBet({ ...bet, potential_win: 0 }, 'push', JSON.stringify(updatedLegs));
+      } else if (winLegs.length === 1) {
+        await settleBet({ ...bet, potential_win: calcWin(bet.wager, winLegs[0].odds) }, 'won', JSON.stringify(updatedLegs));
+      } else {
+        await settleBet({ ...bet, potential_win: calcParlayWin(bet.wager, winLegs.map(l=>l.odds)) }, 'won', JSON.stringify(updatedLegs));
+      }
+    }
+  } catch(e) { console.warn('gradePropsWithESPN error:', e); }
 }
 
 // ── INIT ──
