@@ -360,6 +360,10 @@ html, body { height: 100%; background: var(--dark); color: var(--text); font-fam
     </div>
     <div class="auth-form" id="form-signup">
       <div class="auth-field"><label class="auth-label">Username</label><input class="auth-input" type="text" id="signup-user" placeholder="your username" /></div>
+      <div style="display:flex;gap:8px;">
+        <div class="auth-field" style="flex:1;margin-bottom:14px;"><label class="auth-label">First Name</label><input class="auth-input" type="text" id="signup-firstname" placeholder="Tyler" /></div>
+        <div class="auth-field" style="width:90px;margin-bottom:14px;"><label class="auth-label">Last Initial</label><input class="auth-input" type="text" id="signup-lastinitial" placeholder="W" maxlength="1" style="text-transform:uppercase;" /></div>
+      </div>
       <div class="auth-field"><label class="auth-label">Email</label><input class="auth-input" type="email" id="signup-email" placeholder="you@email.com" /></div>
       <div class="auth-field"><label class="auth-label">Password</label><input class="auth-input" type="password" id="signup-pw" placeholder="min 6 characters" /></div>
       <button class="auth-btn" onclick="signUp()">Create Account</button>
@@ -721,6 +725,8 @@ function switchAuthTab(tab, btn) {
 
 async function signUp() {
   const username = document.getElementById('signup-user').value.trim();
+  const first_name = document.getElementById('signup-firstname').value.trim();
+  const last_initial = document.getElementById('signup-lastinitial').value.trim().toUpperCase().replace(/[^A-Z]/g,'').slice(0,1);
   const email = document.getElementById('signup-email').value.trim();
   const pw = document.getElementById('signup-pw').value;
   const err = document.getElementById('signup-err');
@@ -729,7 +735,7 @@ async function signUp() {
   const {data,error} = await db.auth.signUp({email,password:pw});
   if (error) { err.textContent=error.message; return; }
   if (data.user) {
-    await db.from('profiles').insert({id:data.user.id, username, full_name:username});
+    await db.from('profiles').insert({id:data.user.id, username, full_name:username, first_name, last_initial});
     showToast('Account created! Welcome.');
   }
 }
@@ -2172,6 +2178,17 @@ async function loadMyBets() {
     openEl.innerHTML = open.length ? open.map(b => {
       const isParlay = b.type === 'parlay';
       const legs = isParlay && b.legs ? JSON.parse(b.legs) : null;
+      const gameTimeStr = b.game_time
+        ? (() => {
+            const gt = new Date(b.game_time);
+            const now = new Date();
+            const diffMins = (gt - now) / 60000;
+            if (diffMins < -30) return '🔴 LIVE';
+            if (diffMins < 0)   return '🔴 Starting Now';
+            return '🕐 ' + gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) + ' · ' +
+                   gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+          })()
+        : null;
       return `
         <div class="bet-row">
           <div class="bet-dot pending"></div>
@@ -2182,6 +2199,7 @@ async function loadMyBets() {
             </div>
             ${legs ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">${legs.map(l=>escHtml(l.pick)).join(' · ')}</div>` : ''}
             <div class="bet-meta">${escHtml(b.sport||'')} · $${parseFloat(b.wager).toFixed(2)} wagered · ${formatTimeAgo(b.placed_at)}</div>
+            ${gameTimeStr ? `<div style="font-size:10px;color:var(--gold);margin-top:2px;">${gameTimeStr}</div>` : ''}
           </div>
           <div class="bet-result positive">to win $${parseFloat(b.potential_win).toFixed(2)}</div>
         </div>`;
@@ -2485,7 +2503,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
         }
 
         return `
-          <div class="activity-row">
+          <div class="activity-row" id="bet-row-${b.id}">
             <div class="activity-avatar">${initial}</div>
             <div class="activity-content">
               <div class="activity-text">
@@ -2497,6 +2515,13 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               </div>
               ${parlayLegsHtml ? `<div style="margin-top:4px;border-left:2px solid var(--gold);padding-left:8px;">${parlayLegsHtml}</div>` : ''}
               <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
+              <div class="social-bar" id="social-${b.id}" style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <button class="react-btn" onclick="toggleReaction('${b.id}','fire','${leagueId}')" id="react-fire-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">🔥 <span id="fire-count-${b.id}">0</span></button>
+                <button class="react-btn" onclick="toggleReaction('${b.id}','laugh','${leagueId}')" id="react-laugh-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">😂 <span id="laugh-count-${b.id}">0</span></button>
+                <button class="react-btn" onclick="toggleReaction('${b.id}','cry','${leagueId}')" id="react-cry-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">😭 <span id="cry-count-${b.id}">0</span></button>
+                <button onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 6px;">💬 Comment</button>
+              </div>
+              <div id="comments-${b.id}" style="display:none;margin-top:8px;"></div>
             </div>
           </div>`;
       }
@@ -2525,9 +2550,17 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
       }
 
       // ── OWN BET or revealed: show all details with per-leg status ──
+      const gameStartStr = b.game_time
+        ? (() => {
+            const gt = new Date(b.game_time);
+            return gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) + ' · ' +
+                   gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+          })()
+        : null;
+
       return `
-        <div class="activity-row">
-          <div class="activity-avatar">${initial}</div>
+        <div class="activity-row" id="bet-row-${b.id}">
+          <div class="activity-avatar" style="cursor:pointer;" onclick="openProfile('${b.user_id}',${isMe})">${initial}</div>
           <div class="activity-content">
             <div class="activity-text">
               <strong>${escHtml(isMe ? 'You' : username)}</strong> bet
@@ -2535,7 +2568,14 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               <span style="color:var(--gold)">${b.odds > 0 ? '+' : ''}${b.odds}</span>
               <span class="activity-badge ${b.status}">${b.status}</span>
             </div>
-            <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
+            <div class="activity-time">${escHtml(b.sport||'')} · ${resultText}${gameStartStr ? ' · 🕐 ' + gameStartStr : ''} · ${placedDate}</div>
+            <div class="social-bar" id="social-${b.id}" style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <button class="react-btn" onclick="toggleReaction('${b.id}','fire','${leagueId}')" id="react-fire-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">🔥 <span id="fire-count-${b.id}">0</span></button>
+              <button class="react-btn" onclick="toggleReaction('${b.id}','laugh','${leagueId}')" id="react-laugh-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">😂 <span id="laugh-count-${b.id}">0</span></button>
+              <button class="react-btn" onclick="toggleReaction('${b.id}','cry','${leagueId}')" id="react-cry-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">😭 <span id="cry-count-${b.id}">0</span></button>
+              <button onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 6px;">💬 Comment</button>
+            </div>
+            <div id="comments-${b.id}" style="display:none;margin-top:8px;"></div>
           </div>
         </div>`;
     }).join('');
@@ -2543,6 +2583,11 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
     console.error('loadActivity error:', e);
     el.innerHTML = `<div class="empty" style="cursor:pointer" onclick="loadActivity('${leagueId}')">⟳ Tap to retry</div>`;
   }
+  // Load reactions async after render
+  try {
+    const betIds = (displayBets||[]).map(b => b.id);
+    if (betIds.length) setTimeout(() => loadReactionsForBets(betIds), 100);
+  } catch(e) {}
 }
 
 // ── INVITE ──
@@ -2662,6 +2707,16 @@ async function copyInvite() {
 }
 
 // ── AUTO-GRADING ──
+// Helper: detect if a bet is a player prop (can't be auto-graded from scores API)
+function isPropBet(bet) {
+  if (!bet) return false;
+  // Props have composite game IDs or pick formats like "Player O1.5 Market"
+  const pick = (bet.pick || '').toLowerCase();
+  if (/\bo\d+\.?\d*\b|\bu\d+\.?\d*\b/.test(pick)) return true; // O1.5 / U1.5 format
+  if (bet.game_id && bet.game_id.length > 60) return true; // composite prop IDs are long
+  return false;
+}
+
 // Runs on load + after bets placed. Checks completed games and grades pending bets.
 async function autoGradeBets() {
   if (!currentUser) return;
@@ -2676,18 +2731,17 @@ async function autoGradeBets() {
     );
     if (!pendingBets?.length) return;
 
+    // Skip prop bets entirely — can't be auto-graded from scores API
+    const gradableBets = pendingBets.filter(b => !isPropBet(b));
+
     // Separate straight bets from parlays
-    const straightBets = pendingBets.filter(b => b.type !== 'parlay');
-    const parlayBets   = pendingBets.filter(b => b.type === 'parlay');
+    const straightBets = gradableBets.filter(b => b.type !== 'parlay');
+    const parlayBets   = gradableBets.filter(b => b.type === 'parlay');
 
     // ── Fetch all completed scores we need ──
-    // Collect all unique sport keys needed
-    // Helper: resolve sport key (handles combined strings like "MLB/NHL/NBA")
     const getSportKey = (sportStr) => {
       if (!sportStr) return null;
-      // Try direct match first
       if (SCORES_SPORT_MAP[sportStr]) return SCORES_SPORT_MAP[sportStr];
-      // Try splitting combined strings like "MLB/NHL/NBA"
       const parts = sportStr.split(/[/,\s]+/);
       for (const p of parts) {
         if (SCORES_SPORT_MAP[p.trim()]) return SCORES_SPORT_MAP[p.trim()];
@@ -2700,11 +2754,9 @@ async function autoGradeBets() {
     parlayBets.forEach(b => {
       const legs = safeParseLegs(b.legs);
       legs.forEach(l => {
-        // Each leg has its own sport — use that, not the combined bet sport
         const k = getSportKey(l.sport) || getSportKey(b.sport);
         if (k) sportsNeeded.add(k);
       });
-      // Also add all sports from the combined sport string
       if (b.sport) {
         b.sport.split(/[/,\s]+/).forEach(s => {
           const k = SCORES_SPORT_MAP[s.trim()];
@@ -2713,12 +2765,12 @@ async function autoGradeBets() {
       }
     });
 
-    // Fetch scores per sport key
+    // Fetch scores per sport key — use daysFrom=3 for recent completed games
     const scoresByKey = {};
     for (const sportKey of sportsNeeded) {
       try {
         const res = await fetch(
-          `https://api.the-odds-api.com/v4/sports/${sportKey}/scores/?apiKey=${ODDS_KEY}&daysFrom=7&dateFormat=iso`
+          `https://api.the-odds-api.com/v4/sports/${sportKey}/scores/?apiKey=${ODDS_KEY}&daysFrom=3&dateFormat=iso`
         );
         if (!res.ok) continue;
         const data = await res.json();
@@ -2729,32 +2781,22 @@ async function autoGradeBets() {
     // Helper: find game in scores — try ID first, then fuzzy team name match
     const findGame = (gameId, sport, pick) => {
       const key = getSportKey(sport);
-      if (!key || !scoresByKey[key]) {
-        // Try all available score sets if sport lookup failed
-        for (const scores of Object.values(scoresByKey)) {
-          const byId = scores.find(g => g.id === gameId);
-          if (byId) return byId;
-          if (pick) {
-            const pickLower = pick.toLowerCase().replace(/ ml$| [+-]\d.*$/, '').trim();
-            const fuzzy = scores.find(g =>
-              g.home_team.toLowerCase().includes(pickLower) ||
-              g.away_team.toLowerCase().includes(pickLower) ||
-              pickLower.includes(g.home_team.toLowerCase().split(' ').pop()) ||
-              pickLower.includes(g.away_team.toLowerCase().split(' ').pop())
-            );
-            if (fuzzy) return fuzzy;
-          }
-        }
-        return null;
-      }
-      const games = scoresByKey[key];
-      // 1. Exact ID match
-      const exact = games.find(g => g.id === gameId);
-      if (exact) return exact;
-      // 2. Fuzzy team name match
+      const allScores = Object.values(scoresByKey).flat();
+
+      // 1. Exact ID match across all sport keys
+      const exactAny = allScores.find(g => g.id === gameId);
+      if (exactAny) return exactAny;
+
       if (!pick) return null;
-      const pickLower = pick.toLowerCase().replace(/ ml$| [+-]\d.*$/, '').trim();
-      return games.find(g =>
+      // 2. Fuzzy team name match — strip odds suffix (e.g. " +130", " -1.5 +172")
+      const pickLower = pick.toLowerCase()
+        .replace(/\s+[+-]\d+(\.\d+)?(\s|$).*$/, '') // strip odds
+        .replace(/ ml$/, '')
+        .replace(/^(over|under)\s+\d+\.?\d*/i, '') // strip O/U prefix
+        .trim();
+
+      if (!pickLower) return null;
+      return allScores.find(g =>
         g.home_team.toLowerCase().includes(pickLower) ||
         g.away_team.toLowerCase().includes(pickLower) ||
         pickLower.includes(g.home_team.toLowerCase().split(' ').pop()) ||
@@ -2925,31 +2967,34 @@ function gradePick(pick, game) {
   if (homeScore == null || awayScore == null) return null;
 
   const home = parseFloat(homeScore), away = parseFloat(awayScore);
-  const p = (pick || '').toLowerCase().trim();
+  // Normalize pick: lowercase, strip trailing odds like "+130" or "-110"
+  const p = (pick || '').toLowerCase().trim().replace(/\s+[+-]\d{2,4}(\.\d+)?$/, '').trim();
 
   // Moneyline: "Team Name ML"
-  if (p.includes(' ml')) {
-    const team = p.replace(' ml', '').trim();
+  if (p.endsWith(' ml') || p.includes(' ml ')) {
+    const team = p.replace(/ ml.*$/, '').trim();
     const homeWin = home > away;
     const awayWin = away > home;
-    if (game.home_team.toLowerCase().includes(team)) return homeWin ? 'won' : 'lost';
-    if (game.away_team.toLowerCase().includes(team)) return awayWin ? 'won' : 'lost';
+    if (game.home_team.toLowerCase().includes(team) || team.includes(game.home_team.toLowerCase().split(' ').pop()))
+      return homeWin ? 'won' : away === home ? 'push' : 'lost';
+    if (game.away_team.toLowerCase().includes(team) || team.includes(game.away_team.toLowerCase().split(' ').pop()))
+      return awayWin ? 'won' : away === home ? 'push' : 'lost';
     return null;
   }
 
-  // Spread: "Team Name +X.X" or "Team Name -X.X"
+  // Spread: "Team Name +X.X" or "Team Name -X.X" (may have 1st Half label)
   const spreadMatch = p.match(/^(.+?)\s([+-]\d+\.?\d*)(?:\s|$)/);
   if (spreadMatch && !p.includes('over') && !p.includes('under')) {
     const team = spreadMatch[1].trim();
     const spread = parseFloat(spreadMatch[2]);
-    const isHome = game.home_team.toLowerCase().includes(team);
-    const isAway = game.away_team.toLowerCase().includes(team);
+    const isHome = game.home_team.toLowerCase().includes(team) || team.includes(game.home_team.toLowerCase().split(' ').pop());
+    const isAway = game.away_team.toLowerCase().includes(team) || team.includes(game.away_team.toLowerCase().split(' ').pop());
     if (!isHome && !isAway) return null;
     const teamScore = isHome ? home : away;
     const oppScore  = isHome ? away : home;
     const covered = (teamScore + spread) > oppScore;
-    const push    = (teamScore + spread) === oppScore;
-    if (push) return 'push';
+    const isPush  = (teamScore + spread) === oppScore;
+    if (isPush) return 'push';
     return covered ? 'won' : 'lost';
   }
 
@@ -2964,7 +3009,7 @@ function gradePick(pick, game) {
     if (dir === 'under') return combinedScore < total ? 'won' : 'lost';
   }
 
-  return null; // unrecognized format
+  return null; // unrecognized format (props, golf, futures, etc.)
 }
 
 // ── HELPERS ──
@@ -3211,6 +3256,146 @@ async function saveProfile() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Save Profile'; }
   }
+}
+
+// ── SOCIAL: REACTIONS & COMMENTS ──
+// NOTE: Requires these Supabase tables:
+//   bet_reactions: id, bet_id, user_id, reaction (text), created_at
+//   bet_comments:  id, bet_id, user_id, content (text), created_at
+// Run in Supabase SQL editor:
+//   create table bet_reactions (id uuid primary key default gen_random_uuid(), bet_id uuid references bets(id) on delete cascade, user_id uuid references auth.users(id), reaction text, created_at timestamptz default now(), unique(bet_id, user_id, reaction));
+//   create table bet_comments  (id uuid primary key default gen_random_uuid(), bet_id uuid references bets(id) on delete cascade, user_id uuid references auth.users(id), content text, created_at timestamptz default now());
+//   alter table bet_reactions enable row level security;
+//   alter table bet_comments  enable row level security;
+//   create policy "read all" on bet_reactions for select using (true);
+//   create policy "insert own" on bet_reactions for insert with check (auth.uid() = user_id);
+//   create policy "delete own" on bet_reactions for delete using (auth.uid() = user_id);
+//   create policy "read all" on bet_comments for select using (true);
+//   create policy "insert own" on bet_comments for insert with check (auth.uid() = user_id);
+
+const REACTION_EMOJIS = { fire: '🔥', laugh: '😂', cry: '😭' };
+
+async function loadReactionsForBets(betIds) {
+  if (!betIds.length) return;
+  try {
+    const { data } = await db.from('bet_reactions').select('bet_id, user_id, reaction').in('bet_id', betIds);
+    if (!data) return;
+    // Group by bet_id
+    const grouped = {};
+    data.forEach(r => {
+      if (!grouped[r.bet_id]) grouped[r.bet_id] = {};
+      if (!grouped[r.bet_id][r.reaction]) grouped[r.bet_id][r.reaction] = [];
+      grouped[r.bet_id][r.reaction].push(r.user_id);
+    });
+    // Update UI
+    betIds.forEach(betId => {
+      const counts = grouped[betId] || {};
+      Object.entries(REACTION_EMOJIS).forEach(([key]) => {
+        const countEl = document.getElementById(`${key}-count-${betId}`);
+        const btnEl   = document.getElementById(`react-${key}-${betId}`);
+        if (!countEl || !btnEl) return;
+        const users = counts[key] || [];
+        countEl.textContent = users.length || 0;
+        const isMine = users.includes(currentUser.id);
+        btnEl.style.background    = isMine ? 'var(--gold-dim)' : 'var(--surface2)';
+        btnEl.style.borderColor   = isMine ? 'var(--gold)' : 'var(--border2)';
+        btnEl.style.color         = isMine ? 'var(--gold)' : 'var(--muted2)';
+        btnEl.style.fontWeight    = isMine ? '700' : 'normal';
+      });
+    });
+  } catch(e) { /* bet_reactions table may not exist yet */ }
+}
+
+async function toggleReaction(betId, reaction, leagueId) {
+  if (!currentUser) return;
+  try {
+    // Check if reaction already exists
+    const { data: existing } = await db.from('bet_reactions')
+      .select('id').eq('bet_id', betId).eq('user_id', currentUser.id).eq('reaction', reaction).maybeSingle();
+    if (existing) {
+      await db.from('bet_reactions').delete().eq('id', existing.id);
+    } else {
+      await db.from('bet_reactions').insert({ bet_id: betId, user_id: currentUser.id, reaction });
+    }
+    // Refresh just this bet's reactions
+    await loadReactionsForBets([betId]);
+  } catch(e) { showToast('Reactions require Supabase table setup — see console for SQL.', true); console.warn('toggleReaction error:', e); }
+}
+
+const openCommentBoxes = new Set();
+
+async function toggleComments(betId, leagueId) {
+  const el = document.getElementById(`comments-${betId}`);
+  if (!el) return;
+  if (openCommentBoxes.has(betId)) {
+    el.style.display = 'none';
+    openCommentBoxes.delete(betId);
+    return;
+  }
+  openCommentBoxes.add(betId);
+  el.style.display = 'block';
+  el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:4px 0;">Loading comments...</div>';
+  await renderComments(betId);
+}
+
+async function renderComments(betId) {
+  const el = document.getElementById(`comments-${betId}`);
+  if (!el) return;
+  try {
+    const { data: comments } = await db.from('bet_comments')
+      .select('id, user_id, content, created_at').eq('bet_id', betId).order('created_at', { ascending: true });
+    const userIds = [...new Set((comments||[]).map(c => c.user_id))];
+    const userMap = userIds.length ? await getProfiles(userIds) : {};
+
+    const commentsHtml = (comments||[]).map(c => {
+      const prof = userMap[c.user_id] || {};
+      const name = prof.username || 'Player';
+      const isMe = c.user_id === currentUser.id;
+      const timeAgo = formatTimeAgo(c.created_at);
+      return `
+        <div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start;">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--gold);flex-shrink:0;">${escHtml(name[0].toUpperCase())}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;"><strong style="color:var(--gold);">${escHtml(isMe ? 'You' : name)}</strong> <span style="color:var(--muted);font-size:10px;">${timeAgo}</span></div>
+            <div style="font-size:12px;color:var(--text);margin-top:2px;line-height:1.4;">${escHtml(c.content)}</div>
+          </div>
+          ${isMe ? `<button onclick="deleteComment('${c.id}','${betId}')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;line-height:1;flex-shrink:0;">×</button>` : ''}
+        </div>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div style="border-left:2px solid var(--border2);padding-left:10px;">
+        ${commentsHtml || '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">No comments yet. Be first!</div>'}
+        <div style="display:flex;gap:6px;margin-top:4px;">
+          <input id="comment-input-${betId}" type="text" placeholder="Add a comment…" maxlength="200"
+            style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:6px 10px;font-family:'DM Sans',sans-serif;"
+            onkeydown="if(event.key==='Enter')postComment('${betId}')" />
+          <button onclick="postComment('${betId}')"
+            style="background:var(--gold);border:none;border-radius:6px;color:#0a0d13;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;padding:6px 12px;cursor:pointer;">Send</button>
+        </div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--muted);">Comments unavailable — see console for setup SQL.</div>';
+    console.warn('renderComments error:', e);
+  }
+}
+
+async function postComment(betId) {
+  const input = document.getElementById(`comment-input-${betId}`);
+  const content = input?.value?.trim();
+  if (!content) return;
+  try {
+    await db.from('bet_comments').insert({ bet_id: betId, user_id: currentUser.id, content });
+    input.value = '';
+    await renderComments(betId);
+  } catch(e) { showToast('Could not post comment.', true); console.warn('postComment error:', e); }
+}
+
+async function deleteComment(commentId, betId) {
+  try {
+    await db.from('bet_comments').delete().eq('id', commentId).eq('user_id', currentUser.id);
+    await renderComments(betId);
+  } catch(e) { showToast('Could not delete comment.', true); }
 }
 
 // ── INIT ──
