@@ -1514,6 +1514,7 @@ async function fetchPerEventOdds(markets, isProps) {
                 id: uid, sport: SPORT_NAME_MAP[baseKey]||currentSport,
                 home: ev.home_team, away: ev.away_team,
                 isLive: diffMins<0, time: timeStr, isProp: true,
+                rawTime: ev.commence_time,
                 propPlayer: player,
                 propMarket: mkt.key.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),
                 propLine: line, propOverOdds: overOdds, propUnderOdds: underOdds,
@@ -2422,8 +2423,11 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
     }
 
     el.innerHTML = headerHtml + displayBets.map(b => {
-      const username = userMap[b.user_id]?.username || 'Player';
-      const initial = username[0].toUpperCase();
+      const prof     = userMap[b.user_id] || {};
+      const username = prof.username || 'Player';
+      const avatar   = prof.avatar || username[0].toUpperCase();
+      const avatarIsEmoji = avatar.length > 1 || avatar.codePointAt(0) > 127;
+      const avatarHtml = `<div class="activity-avatar" style="font-size:${avatarIsEmoji?'20px':'13px'};cursor:pointer;" onclick="openProfile('${b.user_id}',${b.user_id === currentUser.id})">${escHtml(avatar)}</div>`;
       const timeAgo = formatTimeAgo(b.placed_at);
       const isMe = b.user_id === currentUser.id;
       const isSettled = b.status !== 'pending';
@@ -2455,7 +2459,8 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
         if (l.result === 'won')  return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;background:rgba(34,197,94,0.15);padding:1px 5px;border-radius:3px;">WON ✓</span>';
         if (l.result === 'lost') return '<span style="font-size:9px;font-weight:700;color:var(--red);flex-shrink:0;background:rgba(239,68,68,0.15);padding:1px 5px;border-radius:3px;">LOST ✗</span>';
         if (l.result === 'push') return '<span style="font-size:9px;font-weight:700;color:var(--muted);flex-shrink:0;">PUSH</span>';
-        const started = l.game_time ? new Date(l.game_time) <= now : true;
+        if (!l.game_time) return '<span style="font-size:9px;color:var(--muted);flex-shrink:0;">pending</span>';
+        const started = new Date(l.game_time) <= now;
         if (started) return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;">LIVE</span>';
         return `<span style="font-size:9px;color:var(--gold);flex-shrink:0;">🕐 ${legDateTime(l)}</span>`;
       };
@@ -2501,8 +2506,8 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
             ? new Date(nextReveal.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
             : 'game time';
           return `
-            <div class="activity-row">
-              <div class="activity-avatar">${initial}</div>
+            <div class="activity-row" id="bet-row-${b.id}">
+              ${avatarHtml}
               <div class="activity-content">
                 <div class="activity-text">
                   <strong>${escHtml(username)}</strong> placed a
@@ -2510,13 +2515,18 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
                   <span class="activity-badge pending">locked</span>
                 </div>
                 <div class="activity-time">First leg reveals at ${revealTime} · ${placedDate}</div>
+                <div class="social-bar" style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                  <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+                  <button type="button" onclick="toggleReactPicker('${b.id}',this)" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
+                </div>
+                <div id="comments-${b.id}" style="margin-top:6px;"></div>
               </div>
             </div>`;
         }
 
         return `
           <div class="activity-row" id="bet-row-${b.id}">
-            <div class="activity-avatar">${initial}</div>
+            ${avatarHtml}
             <div class="activity-content">
               <div class="activity-text">
                 <strong>${escHtml(isMe ? 'You' : username)}</strong>
@@ -2546,8 +2556,8 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               new Date(b.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'})
             : 'game time';
           return `
-            <div class="activity-row">
-              <div class="activity-avatar">${initial}</div>
+            <div class="activity-row" id="bet-row-${b.id}">
+              ${avatarHtml}
               <div class="activity-content">
                 <div class="activity-text">
                   <strong>${escHtml(username)}</strong> placed a bet on
@@ -2555,6 +2565,11 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
                   <span class="activity-badge pending">locked</span>
                 </div>
                 <div class="activity-time">Reveals ${gameDateTime} · placed ${placedDate}</div>
+                <div class="social-bar" style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                  <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+                  <button type="button" onclick="toggleReactPicker('${b.id}',this)" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
+                </div>
+                <div id="comments-${b.id}" style="margin-top:6px;"></div>
               </div>
             </div>`;
         }
@@ -2571,7 +2586,7 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
 
       return `
         <div class="activity-row" id="bet-row-${b.id}">
-          <div class="activity-avatar" style="cursor:pointer;" onclick="openProfile('${b.user_id}',${isMe})">${initial}</div>
+          ${avatarHtml}
           <div class="activity-content">
             <div class="activity-text">
               <strong>${escHtml(isMe ? 'You' : username)}</strong> bet
@@ -2580,12 +2595,11 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               <span class="activity-badge ${b.status}">${b.status}</span>
             </div>
             <div class="activity-time">${escHtml(b.sport||'')} · ${resultText}${gameStartStr ? ' · 🕐 ' + gameStartStr : ''} · ${placedDate}</div>
-            <div class="social-bar" id="social-${b.id}" style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+            <div class="social-bar" style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
               <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
               <button type="button" onclick="toggleReactPicker('${b.id}',this)" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
-              <button type="button" onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 4px;">💬</button>
             </div>
-            <div id="comments-${b.id}" style="display:none;margin-top:8px;"></div>
+            <div id="comments-${b.id}" style="margin-top:6px;"></div>
           </div>
         </div>`;
     }).join('');
@@ -2593,10 +2607,24 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
     console.error('loadActivity error:', e);
     el.innerHTML = `<div class="empty" style="cursor:pointer" onclick="loadActivity('${leagueId}')">⟳ Tap to retry</div>`;
   }
-  // Load reactions async after render
+
+  // Batch load reactions + comments for ALL bets automatically (no toggle needed)
   try {
     const betIds = (displayBets||[]).map(b => b.id);
-    if (betIds.length) setTimeout(() => loadReactionsForBets(betIds), 100);
+    if (!betIds.length) return;
+    setTimeout(() => loadReactionsForBets(betIds), 80);
+    setTimeout(async () => {
+      try {
+        const { data: allComments } = await db.from('bet_comments')
+          .select('id, bet_id, user_id, content, created_at')
+          .in('bet_id', betIds).order('created_at', { ascending: true });
+        const commenterIds = [...new Set((allComments||[]).map(c => c.user_id))];
+        const commenterMap = commenterIds.length ? await getProfiles(commenterIds) : {};
+        const byBet = {};
+        (allComments||[]).forEach(c => { if(!byBet[c.bet_id]) byBet[c.bet_id]=[]; byBet[c.bet_id].push({...c, prof: commenterMap[c.user_id]||{}}); });
+        betIds.forEach(bid => renderInlineCommentBox(bid, byBet[bid]||[], leagueId));
+      } catch(e) { betIds.forEach(bid => renderInlineCommentBox(bid, [], leagueId)); }
+    }, 150);
   } catch(e) {}
 }
 
@@ -3479,21 +3507,72 @@ async function renderComments(betId) {
   }
 }
 
-async function postComment(betId) {
+// Renders comment box inline for a bet (called after batch load, and after posting)
+function renderInlineCommentBox(betId, comments, leagueId) {
+  const el = document.getElementById(`comments-${betId}`);
+  if (!el) return;
+
+  const commentsHtml = comments.map(c => {
+    const prof = c.prof || {};
+    const name = prof.username || 'Player';
+    const avatarC = prof.avatar || name[0].toUpperCase();
+    const avatarIsEmoji = avatarC.length > 1 || avatarC.codePointAt(0) > 127;
+    const isMe = c.user_id === currentUser?.id;
+    return `
+      <div style="display:flex;gap:7px;margin-bottom:7px;align-items:flex-start;">
+        <div style="width:22px;height:22px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:${avatarIsEmoji?'13px':'10px'};font-weight:700;color:var(--gold);flex-shrink:0;">${escHtml(avatarC)}</div>
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:11px;font-weight:600;color:var(--gold);">${escHtml(isMe?'You':name)}</span>
+          <span style="font-size:10px;color:var(--muted);margin-left:5px;">${formatTimeAgo(c.created_at)}</span>
+          <div style="font-size:12px;color:var(--text);margin-top:1px;line-height:1.4;word-break:break-word;">${escHtml(c.content)}</div>
+        </div>
+        ${isMe ? `<button type="button" onclick="deleteComment('${c.id}','${betId}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;line-height:1;flex-shrink:0;padding:0;">×</button>` : ''}
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="border-left:2px solid var(--border2);padding-left:8px;">
+      <div id="comment-list-${betId}">${commentsHtml}</div>
+      <div style="display:flex;gap:6px;margin-top:${comments.length?'8':'0'}px;">
+        <input id="comment-input-${betId}" type="text" placeholder="Add a comment…" maxlength="200"
+          autocomplete="new-password" data-form-type="other" data-lpignore="true"
+          style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:5px 9px;font-family:'DM Sans',sans-serif;"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();postComment('${betId}','${leagueId}')}" />
+        <button type="button" onclick="postComment('${betId}','${leagueId}')"
+          style="background:var(--gold);border:none;border-radius:6px;color:#0a0d13;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1px;padding:5px 10px;cursor:pointer;">Send</button>
+      </div>
+    </div>`;
+}
+
+async function postComment(betId, leagueId) {
   const input = document.getElementById(`comment-input-${betId}`);
   const content = input?.value?.trim();
   if (!content) return;
+  input.value = '';
   try {
-    await db.from('bet_comments').insert({ bet_id: betId, user_id: currentUser.id, content });
-    input.value = '';
-    await renderComments(betId);
+    const { data: newComment, error } = await db.from('bet_comments')
+      .insert({ bet_id: betId, user_id: currentUser.id, content })
+      .select('id, bet_id, user_id, content, created_at').single();
+    if (error) throw error;
+    // Refresh this bet's comment box
+    const { data: allComments } = await db.from('bet_comments')
+      .select('id, bet_id, user_id, content, created_at').eq('bet_id', betId).order('created_at', { ascending: true });
+    const commenterIds = [...new Set((allComments||[]).map(c => c.user_id))];
+    const commenterMap = await getProfiles(commenterIds);
+    const enriched = (allComments||[]).map(c => ({ ...c, prof: commenterMap[c.user_id]||{} }));
+    renderInlineCommentBox(betId, enriched, leagueId);
   } catch(e) { showToast('Could not post comment.', true); console.warn('postComment error:', e); }
 }
 
-async function deleteComment(commentId, betId) {
+async function deleteComment(commentId, betId, leagueId) {
   try {
     await db.from('bet_comments').delete().eq('id', commentId).eq('user_id', currentUser.id);
-    await renderComments(betId);
+    const { data: allComments } = await db.from('bet_comments')
+      .select('id, bet_id, user_id, content, created_at').eq('bet_id', betId).order('created_at', { ascending: true });
+    const commenterIds = [...new Set((allComments||[]).map(c => c.user_id))];
+    const commenterMap = await getProfiles(commenterIds);
+    const enriched = (allComments||[]).map(c => ({ ...c, prof: commenterMap[c.user_id]||{} }));
+    renderInlineCommentBox(betId, enriched, leagueId);
   } catch(e) { showToast('Could not delete comment.', true); }
 }
 
