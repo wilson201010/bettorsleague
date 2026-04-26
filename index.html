@@ -2437,15 +2437,22 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
         ? `-$${parseFloat(b.wager||0).toFixed(2)}`
         : `$${parseFloat(b.wager||0).toFixed(2)} wagered`;
 
-      // Helper: leg status badge (shown right after pick name)
+      // Helper: full date+time string for a leg
+      const legDateTime = (l) => {
+        if (!l.game_time) return '';
+        const gt = new Date(l.game_time);
+        return gt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) + ' · ' +
+               gt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+      };
+
+      // Helper: leg status badge
       const legStatusBadge = (l) => {
         if (l.result === 'won')  return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;background:rgba(34,197,94,0.15);padding:1px 5px;border-radius:3px;">WON ✓</span>';
         if (l.result === 'lost') return '<span style="font-size:9px;font-weight:700;color:var(--red);flex-shrink:0;background:rgba(239,68,68,0.15);padding:1px 5px;border-radius:3px;">LOST ✗</span>';
         if (l.result === 'push') return '<span style="font-size:9px;font-weight:700;color:var(--muted);flex-shrink:0;">PUSH</span>';
         const started = l.game_time ? new Date(l.game_time) <= now : true;
         if (started) return '<span style="font-size:9px;font-weight:700;color:var(--green);flex-shrink:0;">LIVE</span>';
-        const t = l.game_time ? new Date(l.game_time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
-        return `<span style="font-size:9px;color:var(--muted);flex-shrink:0;">${t}</span>`;
+        return `<span style="font-size:9px;color:var(--gold);flex-shrink:0;">🕐 ${legDateTime(l)}</span>`;
       };
 
       // Helper: leg row HTML
@@ -2515,11 +2522,13 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               </div>
               ${parlayLegsHtml ? `<div style="margin-top:4px;border-left:2px solid var(--gold);padding-left:8px;">${parlayLegsHtml}</div>` : ''}
               <div class="activity-time">${escHtml(b.sport||'')} · ${resultText} · ${placedDate}</div>
-              <div class="social-bar" id="social-${b.id}" style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                <button class="react-btn" onclick="toggleReaction('${b.id}','fire','${leagueId}')" id="react-fire-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">🔥 <span id="fire-count-${b.id}">0</span></button>
-                <button class="react-btn" onclick="toggleReaction('${b.id}','laugh','${leagueId}')" id="react-laugh-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">😂 <span id="laugh-count-${b.id}">0</span></button>
-                <button class="react-btn" onclick="toggleReaction('${b.id}','cry','${leagueId}')" id="react-cry-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">😭 <span id="cry-count-${b.id}">0</span></button>
-                <button onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 6px;">💬 Comment</button>
+              <div class="social-bar" id="social-${b.id}" style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+                <button onclick="toggleReactPicker('${b.id}')" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
+                <div id="react-picker-${b.id}" style="display:none;position:absolute;z-index:10;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:8px 10px;box-shadow:0 4px 16px rgba(0,0,0,0.4);margin-top:2px;flex-wrap:wrap;gap:4px;max-width:220px;">
+                  ${['🔥','🤑','💎','🎯','🍀','😂','😭','🤦','🚀','👑'].map(e=>`<button onclick="toggleReaction('${b.id}','${e}','${leagueId}')" style="background:none;border:1px solid transparent;border-radius:8px;font-size:20px;padding:4px;cursor:pointer;line-height:1;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">${e}</button>`).join('')}
+                </div>
+                <button onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 4px;">💬</button>
               </div>
               <div id="comments-${b.id}" style="display:none;margin-top:8px;"></div>
             </div>
@@ -2569,11 +2578,13 @@ async function loadActivity(leagueId, filterUserId = null, filterUsername = null
               <span class="activity-badge ${b.status}">${b.status}</span>
             </div>
             <div class="activity-time">${escHtml(b.sport||'')} · ${resultText}${gameStartStr ? ' · 🕐 ' + gameStartStr : ''} · ${placedDate}</div>
-            <div class="social-bar" id="social-${b.id}" style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <button class="react-btn" onclick="toggleReaction('${b.id}','fire','${leagueId}')" id="react-fire-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">🔥 <span id="fire-count-${b.id}">0</span></button>
-              <button class="react-btn" onclick="toggleReaction('${b.id}','laugh','${leagueId}')" id="react-laugh-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">😂 <span id="laugh-count-${b.id}">0</span></button>
-              <button class="react-btn" onclick="toggleReaction('${b.id}','cry','${leagueId}')" id="react-cry-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted2);">😭 <span id="cry-count-${b.id}">0</span></button>
-              <button onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 6px;">💬 Comment</button>
+            <div class="social-bar" id="social-${b.id}" style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+              <div id="reaction-pills-${b.id}" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+              <button onclick="toggleReactPicker('${b.id}')" id="react-add-${b.id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--muted2);">+ React</button>
+              <div id="react-picker-${b.id}" style="display:none;position:absolute;z-index:10;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:8px 10px;box-shadow:0 4px 16px rgba(0,0,0,0.4);margin-top:2px;display:none;flex-wrap:wrap;gap:4px;max-width:220px;">
+                ${['🔥','🤑','💎','🎯','🍀','😂','😭','🤦','🚀','👑'].map(e=>`<button onclick="toggleReaction('${b.id}','${e}','${leagueId}')" style="background:none;border:1px solid transparent;border-radius:8px;font-size:20px;padding:4px;cursor:pointer;line-height:1;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">${e}</button>`).join('')}
+              </div>
+              <button onclick="toggleComments('${b.id}','${leagueId}')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:3px 4px;">💬</button>
             </div>
             <div id="comments-${b.id}" style="display:none;margin-top:8px;"></div>
           </div>
@@ -2779,34 +2790,53 @@ async function autoGradeBets() {
     }
 
     // Helper: find game in scores — try ID first, then fuzzy team name match
-    const findGame = (gameId, sport, pick) => {
-      const key = getSportKey(sport);
+    const findGame = (gameId, sport, pick, betGameTime = null) => {
       const allScores = Object.values(scoresByKey).flat();
 
       // 1. Exact ID match across all sport keys
       const exactAny = allScores.find(g => g.id === gameId);
-      if (exactAny) return exactAny;
+      if (exactAny) {
+        // Still verify game time if available
+        if (betGameTime && exactAny.commence_time) {
+          const diff = Math.abs(new Date(exactAny.commence_time) - new Date(betGameTime));
+          if (diff > 6 * 60 * 60 * 1000) return null; // ID match but wrong day
+        }
+        return exactAny;
+      }
 
       if (!pick) return null;
-      // 2. Fuzzy team name match — strip odds suffix (e.g. " +130", " -1.5 +172")
+      // 2. Fuzzy team name match — strip odds suffix
       const pickLower = pick.toLowerCase()
-        .replace(/\s+[+-]\d+(\.\d+)?(\s|$).*$/, '') // strip odds
+        .replace(/\s+[+-]\d+(\.\d+)?(\s|$).*$/, '')
         .replace(/ ml$/, '')
-        .replace(/^(over|under)\s+\d+\.?\d*/i, '') // strip O/U prefix
+        .replace(/^(over|under)\s+\d+\.?\d*/i, '')
         .trim();
 
       if (!pickLower) return null;
-      return allScores.find(g =>
-        g.home_team.toLowerCase().includes(pickLower) ||
-        g.away_team.toLowerCase().includes(pickLower) ||
-        pickLower.includes(g.home_team.toLowerCase().split(' ').pop()) ||
-        pickLower.includes(g.away_team.toLowerCase().split(' ').pop())
-      ) || null;
+      // Fuzzy match — but only accept if game time is within 6 hours of bet's expected game time
+      return allScores.find(g => {
+        const nameMatch =
+          g.home_team.toLowerCase().includes(pickLower) ||
+          g.away_team.toLowerCase().includes(pickLower) ||
+          pickLower.includes(g.home_team.toLowerCase().split(' ').pop()) ||
+          pickLower.includes(g.away_team.toLowerCase().split(' ').pop());
+        if (!nameMatch) return false;
+        // If bet has a game_time, ensure this completed game is within 6hrs of it
+        if (betGameTime && g.commence_time) {
+          const diff = Math.abs(new Date(g.commence_time) - new Date(betGameTime));
+          if (diff > 6 * 60 * 60 * 1000) return false; // wrong game day
+        }
+        return true;
+      }) || null;
     };
+
+    const now = new Date();
 
     // ── Grade straight bets ──
     for (const bet of straightBets) {
-      const game = findGame(bet.game_id, bet.sport, bet.pick);
+      // CRITICAL: never grade a bet whose game hasn't started yet
+      if (bet.game_time && new Date(bet.game_time) > now) continue;
+      const game = findGame(bet.game_id, bet.sport, bet.pick, bet.game_time);
       if (!game) continue;
       const result = gradePick(bet.pick, game);
       if (!result) continue;
@@ -2823,7 +2853,13 @@ async function autoGradeBets() {
       let allSettled = true;
 
       for (const leg of legs) {
-        const game = findGame(leg.gameId, leg.sport, leg.pick);
+        // Never grade a leg whose game hasn't started yet
+        if (leg.game_time && new Date(leg.game_time) > now) {
+          allSettled = false;
+          updatedLegs.push(leg);
+          continue;
+        }
+        const game = findGame(leg.gameId, leg.sport, leg.pick, leg.game_time);
         if (!game) {
           // Game not done yet — parlay still pending
           allSettled = false;
@@ -3273,43 +3309,64 @@ async function saveProfile() {
 //   create policy "read all" on bet_comments for select using (true);
 //   create policy "insert own" on bet_comments for insert with check (auth.uid() = user_id);
 
-const REACTION_EMOJIS = { fire: '🔥', laugh: '😂', cry: '😭' };
+const REACTION_EMOJIS = ['🔥','🤑','💎','🎯','🍀','😂','😭','🤦','🚀','👑'];
+
+// Close react pickers when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[id^="react-picker-"]') && !e.target.closest('[id^="react-add-"]')) {
+    document.querySelectorAll('[id^="react-picker-"]').forEach(el => el.style.display = 'none');
+  }
+});
+
+function toggleReactPicker(betId) {
+  const picker = document.getElementById(`react-picker-${betId}`);
+  if (!picker) return;
+  const isOpen = picker.style.display === 'flex';
+  document.querySelectorAll('[id^="react-picker-"]').forEach(el => el.style.display = 'none');
+  if (!isOpen) picker.style.display = 'flex';
+}
 
 async function loadReactionsForBets(betIds) {
   if (!betIds.length) return;
   try {
     const { data } = await db.from('bet_reactions').select('bet_id, user_id, reaction').in('bet_id', betIds);
     if (!data) return;
-    // Group by bet_id
+    // Group: { betId: { emoji: [userId, ...] } }
     const grouped = {};
     data.forEach(r => {
       if (!grouped[r.bet_id]) grouped[r.bet_id] = {};
       if (!grouped[r.bet_id][r.reaction]) grouped[r.bet_id][r.reaction] = [];
       grouped[r.bet_id][r.reaction].push(r.user_id);
     });
-    // Update UI
     betIds.forEach(betId => {
+      const pillsEl = document.getElementById(`reaction-pills-${betId}`);
+      if (!pillsEl) return;
       const counts = grouped[betId] || {};
-      Object.entries(REACTION_EMOJIS).forEach(([key]) => {
-        const countEl = document.getElementById(`${key}-count-${betId}`);
-        const btnEl   = document.getElementById(`react-${key}-${betId}`);
-        if (!countEl || !btnEl) return;
-        const users = counts[key] || [];
-        countEl.textContent = users.length || 0;
-        const isMine = users.includes(currentUser.id);
-        btnEl.style.background    = isMine ? 'var(--gold-dim)' : 'var(--surface2)';
-        btnEl.style.borderColor   = isMine ? 'var(--gold)' : 'var(--border2)';
-        btnEl.style.color         = isMine ? 'var(--gold)' : 'var(--muted2)';
-        btnEl.style.fontWeight    = isMine ? '700' : 'normal';
-      });
+      // Only render pills for emojis with ≥1 reaction
+      const pills = REACTION_EMOJIS
+        .filter(e => counts[e]?.length > 0)
+        .map(e => {
+          const users = counts[e];
+          const isMine = users.includes(currentUser?.id);
+          return `<button onclick="toggleReaction('${betId}','${e}',null)"
+            style="background:${isMine?'var(--gold-dim)':'var(--surface2)'};
+                   border:1px solid ${isMine?'var(--gold)':'var(--border2)'};
+                   border-radius:20px;padding:2px 9px;font-size:12px;cursor:pointer;
+                   color:${isMine?'var(--gold)':'var(--muted2)'};font-weight:${isMine?'700':'normal'};
+                   display:inline-flex;align-items:center;gap:4px;line-height:1.5;">
+            ${e} <span style="font-size:11px;">${users.length}</span>
+          </button>`;
+        });
+      pillsEl.innerHTML = pills.join('');
     });
   } catch(e) { /* bet_reactions table may not exist yet */ }
 }
 
 async function toggleReaction(betId, reaction, leagueId) {
   if (!currentUser) return;
+  // Close picker
+  document.querySelectorAll('[id^="react-picker-"]').forEach(el => el.style.display = 'none');
   try {
-    // Check if reaction already exists
     const { data: existing } = await db.from('bet_reactions')
       .select('id').eq('bet_id', betId).eq('user_id', currentUser.id).eq('reaction', reaction).maybeSingle();
     if (existing) {
@@ -3317,9 +3374,8 @@ async function toggleReaction(betId, reaction, leagueId) {
     } else {
       await db.from('bet_reactions').insert({ bet_id: betId, user_id: currentUser.id, reaction });
     }
-    // Refresh just this bet's reactions
     await loadReactionsForBets([betId]);
-  } catch(e) { showToast('Reactions require Supabase table setup — see console for SQL.', true); console.warn('toggleReaction error:', e); }
+  } catch(e) { showToast('Reactions require Supabase setup.', true); console.warn('toggleReaction error:', e); }
 }
 
 const openCommentBoxes = new Set();
